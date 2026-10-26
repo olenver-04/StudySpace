@@ -53,6 +53,19 @@ def is_valid_catalog(config: object) -> bool:
     return isinstance(config, dict) and isinstance(config.get('courses'), list)
 
 
+def course_languages(course: dict) -> tuple[str, ...]:
+    """Enabled languages; old courses without a field remain bilingual.
+
+    Reject invalid stored values without accidentally broadening the audience.
+    """
+    if 'languages' not in course:
+        return LANGUAGES
+    configured = course.get('languages')
+    if not isinstance(configured, list):
+        return ()
+    return tuple(lang for lang in LANGUAGES if lang in configured)
+
+
 def parse_materials(tree: list[dict], courses: list[dict]) -> list[dict]:
     """Index GitHub tree; only explicitly registered courses are visible."""
     accepted = {c['id']: c for c in courses if isinstance(c, dict) and valid_slug(c.get('id', ''))}
@@ -73,7 +86,7 @@ def parse_materials(tree: list[dict], courses: list[dict]) -> list[dict]:
             kind = 'lectures' if PurePosixPath(filename).suffix.lower() in {'.md','.txt','.doc','.docx'} or re.search(r'(?i)lekciya|lecture|lektsiya|дәріс|лекция', filename) else 'presentations'
         else:
             continue
-        if course_id not in accepted or language not in LANGUAGES:
+        if course_id not in accepted or language not in course_languages(accepted[course_id]):
             continue
         if filename.startswith('.') or PurePosixPath(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
             continue

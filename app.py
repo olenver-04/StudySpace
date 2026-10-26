@@ -17,7 +17,7 @@ import streamlit.components.v1 as components
 
 from github_store import GithubError, GithubStore
 from portal_logic import (
-    ALLOWED_EXTENSIONS, display_course, human_size, parse_materials,
+    ALLOWED_EXTENSIONS, course_languages, display_course, human_size, parse_materials,
     safe_filename, slugify, upload_path, valid_slug,
 )
 
@@ -25,6 +25,7 @@ st.set_page_config(page_title='StudySpace • Education Hub', page_icon='✳️'
 BASE = Path(__file__).resolve().parent
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 LANG_LABELS = {'ru': '🇷🇺 Русский', 'kz': '🇰🇿 Қазақша'}
+TEACHING_LANGUAGES = {'ru': '🇷🇺 Только русский', 'kz': '🇰🇿 Тек қазақша', 'both': '🌐 На двух языках'}
 EMOJIS = ['📘', '💻', '☕', '🧩', '🗄️', '🛠️', '🌐', '📊', '🔬', '🧮', '🎨', '📐', '📚', '⚙️']
 
 I18N = {
@@ -248,6 +249,7 @@ def card(item: dict, lang: str, prefix: str = '') -> None:
 
 def home(config: dict, materials: list[dict], lang: str) -> None:
     t = I18N[lang]
+    visible_courses = [c for c in config['courses'] if lang in course_languages(c)]
     visible = [m for m in materials if m['lang'] == lang]
     total_lectures = sum(i['kind'] == 'lectures' for i in visible)
     total_presentations = len(visible)-total_lectures
@@ -264,18 +266,18 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
         if st.button(t['browse']+'   ↗', type='primary', key='hero_browse'):
             route('library')
     st.markdown(
-        f'<div class="stat-strip"><div><span class="stat-icon">◫</span><b>{len(config["courses"]):02d}</b><span>{esc(t["courses"])}</span></div>'
+        f'<div class="stat-strip"><div><span class="stat-icon">◫</span><b>{len(visible_courses):02d}</b><span>{esc(t["courses"])}</span></div>'
         f'<div><span class="stat-icon">▦</span><b>{len(visible):02d}</b><span>{esc(t["materials"])}</span></div>'
         f'<div><span class="stat-icon">▤</span><b>{total_lectures:02d}</b><span>{esc(t["lectures"])}</span></div>'
         f'<div><span class="stat-icon">▣</span><b>{total_presentations:02d}</b><span>{esc(t["presentations"])}</span></div></div>',
         unsafe_allow_html=True,
     )
     header(t['courses'], t['course_sub'], '02 / DISCOVER')
-    if not config['courses']:
+    if not visible_courses:
         empty(t['empty_courses'], t['empty_desc'])
         return
     cols = st.columns(3, gap='medium')
-    for index, course in enumerate(config['courses']):
+    for index, course in enumerate(visible_courses):
         with cols[index % 3]:
             course_card(course, lang, materials, index)
 
@@ -287,11 +289,13 @@ def empty(title: str, subtitle: str) -> None:
 def library(config: dict, materials: list[dict], lang: str) -> None:
     t = I18N[lang]
     header(t['catalog_head'], t['catalog_sub'], 'LIBRARY / '+LANG_LABELS[lang])
-    if not config['courses']:
+    courses = [c for c in config['courses'] if lang in course_languages(c)]
+    if not courses:
         empty(t['empty_courses'], t['empty_desc'])
         return
-    courses = config['courses']
     options = ['all']+[c['id'] for c in courses]
+    if st.session_state.get(f'course_selector_{lang}', 'all') not in options:
+        st.session_state[f'course_selector_{lang}'] = 'all'
     current = st.session_state.get('course', '')
     if current not in options:
         current = 'all'
@@ -432,17 +436,35 @@ def admin(config: dict, materials: list[dict]) -> None:
     create_tab, upload_tab, manage_tab = st.tabs(['✳   Создать дисциплину', '↥   Загрузить материалы', '▦   Мои дисциплины'])
     with create_tab:
         st.markdown('#### ✦ Новая дисциплина')
-        st.caption('Создаст папки ru и kz в GitHub. Названия будут отображаться на выбранном языке.')
+        st.caption('Выбери, на каком языке преподаётся дисциплина. Для каждого выбранного языка появится отдельная папка и раздел для студентов.')
+        teaching = st.radio(
+            'Язык преподавания *', list(TEACHING_LANGUAGES),
+            format_func=lambda choice: TEACHING_LANGUAGES[choice], horizontal=True,
+            key='new_course_language',
+        )
+        selected_languages = ['ru', 'kz'] if teaching == 'both' else [teaching]
+        details = {
+            'ru': 'Дисциплина появится только в русском разделе. Создастся папка ru.',
+            'kz': 'Пән тек қазақша бөлімде көрсетіледі. kz қалтасы жасалады.',
+            'both': 'Дисциплина появится в обоих разделах. Создадутся папки ru и kz, материалы для них загружаются отдельно.',
+        }
+        st.markdown(
+            f'<div class="language-choice-summary"><span>✦</span><div><b>{esc(TEACHING_LANGUAGES[teaching])}</b>'
+            f'<p>{esc(details[teaching])}</p></div></div>',
+            unsafe_allow_html=True,
+        )
         with st.form('create_course', clear_on_submit=True):
-            title_ru = st.text_input('Название на русском *', placeholder='Например: Программирование на Java')
-            title_kz = st.text_input('Қазақша атауы *', placeholder='Мысалы: Java бағдарламалау')
+            title_ru = (st.text_input('Название на русском *', placeholder='Например: Программирование на Java')
+                        if 'ru' in selected_languages else '')
+            title_kz = (st.text_input('Қазақша атауы *', placeholder='Мысалы: Java бағдарламалау')
+                        if 'kz' in selected_languages else '')
             slug_override = st.text_input('Название папки латиницей (необязательно)', placeholder='Например: java')
             icon = st.selectbox('Иконка дисциплины', EMOJIS)
             created = st.form_submit_button('＋ Создать дисциплину', type='primary', use_container_width=True)
         if created:
-            course_id = (slug_override.strip().lower() or slugify(title_ru))
-            if not title_ru.strip() or not title_kz.strip():
-                st.error('Заполни названия на обоих языках.')
+            course_id = (slug_override.strip().lower() or slugify(title_ru or title_kz))
+            if ('ru' in selected_languages and not title_ru.strip()) or ('kz' in selected_languages and not title_kz.strip()):
+                st.error('Заполни название на каждом выбранном языке.')
             elif not valid_slug(course_id):
                 st.error('Название папки: только латинские буквы, цифры и дефис (до 65 символов).')
             else:
@@ -451,15 +473,19 @@ def admin(config: dict, materials: list[dict]) -> None:
                     if any(c.get('id') == course_id for c in live.get('courses', [])):
                         st.error('Дисциплина с такой папкой уже существует. Используй другое название.')
                     else:
-                        # Git does not track empty folders: .gitkeep ensures both show up immediately.
-                        github.ensure_folder(f'materials/uploads/{course_id}/ru')
-                        github.ensure_folder(f'materials/uploads/{course_id}/kz')
-                        live.setdefault('courses', []).append({'id':course_id, 'title_ru':title_ru.strip(),
-                                                               'title_kz':title_kz.strip(), 'icon':icon})
+                        # GitHub does not store empty directories. Create only selected languages.
+                        for enabled_lang in selected_languages:
+                            github.ensure_folder(f'materials/uploads/{course_id}/{enabled_lang}')
+                        live.setdefault('courses', []).append({
+                            'id': course_id, 'title_ru': title_ru.strip(),
+                            'title_kz': title_kz.strip(), 'icon': icon,
+                            'languages': selected_languages,
+                        })
                         github.write_file('catalog.json', (json.dumps(live, ensure_ascii=False, indent=2)+'\n').encode('utf-8'),
                                           'StudySpace: add course '+course_id, replace=True)
                         refresh_data()
-                        st.session_state['success_msg'] = f'✅ Дисциплина «{title_ru.strip()}» создана. Папки ru и kz появились в GitHub.'
+                        lang_names = ', '.join(selected_languages)
+                        st.session_state['success_msg'] = f'✅ Дисциплина создана. Языки: {lang_names}. Папки появились в GitHub.'
                         st.rerun()
                 except GithubError as exc:
                     st.error(f'Не удалось завершить создание: {exc}. Если папки уже появились, повтори создание — они не пропадут.')
@@ -468,50 +494,99 @@ def admin(config: dict, materials: list[dict]) -> None:
         if not config['courses']:
             st.info('Сначала создай хотя бы одну дисциплину.')
         else:
-            with st.form('upload_files', clear_on_submit=False):
-                course = st.selectbox('Дисциплина *', config['courses'],
-                                      format_func=lambda c: c['title_ru']+' / '+c.get('title_kz',''))
-                language = st.radio('Язык материала *', ['ru', 'kz'], format_func=lambda v: LANG_LABELS[v], horizontal=True)
-                kind = st.radio('Что загружаем? *', ['lectures', 'presentations'],
-                                format_func=lambda k: '📖 Лекция' if k == 'lectures' else '🖥 Презентация', horizontal=True)
-                files = st.file_uploader('Добавить файлы', accept_multiple_files=True,
-                                         type=[s[1:] for s in sorted(ALLOWED_EXTENSIONS)],
-                                         help='PDF, PPTX, DOCX, DOC, PPT, MD, TXT, HTML. До 20 МБ на файл.')
-                replace = st.checkbox('Заменять файлы с тем же названием', value=False)
-                uploaded = st.form_submit_button('↑ Опубликовать материалы', type='primary', use_container_width=True)
-            if uploaded:
-                if not files:
-                    st.warning('Выбери хотя бы один файл.')
-                else:
-                    successes, failures = [], []
-                    for file in files:
-                        try:
-                            if file.size > MAX_UPLOAD_BYTES:
-                                raise ValueError('Файл больше 20 МБ.')
-                            filename = safe_filename(file.name)
-                            path = upload_path(course['id'], language, kind, filename)
-                            github.write_file(path, file.getvalue(), 'StudySpace: upload '+path, replace=replace)
-                            successes.append(filename)
-                        except (GithubError, ValueError) as exc:
-                            failures.append(f'{file.name}: {exc}')
-                    if successes:
-                        refresh_data()
-                        st.session_state['success_msg'] = f'✅ Загружено файлов: {len(successes)}. Они уже сохранены в GitHub.'
-                    if failures:
-                        st.session_state['warning_msg'] = 'Не удалось загрузить:\n'+'\n'.join(failures)
-                    if successes:
-                        st.rerun()
-                    if failures:
-                        st.warning(st.session_state.pop('warning_msg'))
+            # Outside the form so language options refresh as soon as a course is chosen.
+            course = st.selectbox('Дисциплина *', config['courses'],
+                                  format_func=lambda c: (c.get('title_ru') or c.get('title_kz') or c['id']),
+                                  key='upload_course')
+            allowed_languages = list(course_languages(course))
+            if not allowed_languages:
+                st.error('У дисциплины не настроен язык. Измени доступные языки во вкладке «Мои дисциплины».')
+            else:
+                st.caption('Доступные языки: '+', '.join(LANG_LABELS[v] for v in allowed_languages))
+                with st.form('upload_files', clear_on_submit=False):
+                    language = st.radio('Язык материала *', allowed_languages,
+                                        format_func=lambda v: LANG_LABELS[v], horizontal=True,
+                                        key=f'upload_language_choice_{course["id"]}')
+                    kind = st.radio('Что загружаем? *', ['lectures', 'presentations'],
+                                    format_func=lambda k: '📖 Лекция' if k == 'lectures' else '🖥 Презентация', horizontal=True)
+                    files = st.file_uploader('Добавить файлы', accept_multiple_files=True,
+                                             type=[s[1:] for s in sorted(ALLOWED_EXTENSIONS)],
+                                             help='PDF, PPTX, DOCX, DOC, PPT, MD, TXT, HTML. До 20 МБ на файл.')
+                    replace = st.checkbox('Заменять файлы с тем же названием', value=False)
+                    uploaded = st.form_submit_button('↑ Опубликовать материалы', type='primary', use_container_width=True)
+                if uploaded:
+                    if language not in course_languages(course):
+                        st.error('Этот язык отключён для выбранной дисциплины. Обнови страницу.')
+                    elif not files:
+                        st.warning('Выбери хотя бы один файл.')
+                    else:
+                        successes, failures = [], []
+                        for file in files:
+                            try:
+                                if file.size > MAX_UPLOAD_BYTES:
+                                    raise ValueError('Файл больше 20 МБ.')
+                                filename = safe_filename(file.name)
+                                path = upload_path(course['id'], language, kind, filename)
+                                github.write_file(path, file.getvalue(), 'StudySpace: upload '+path, replace=replace)
+                                successes.append(filename)
+                            except (GithubError, ValueError) as exc:
+                                failures.append(f'{file.name}: {exc}')
+                        if successes:
+                            refresh_data()
+                            st.session_state['success_msg'] = f'✅ Загружено файлов: {len(successes)}. Они уже сохранены в GitHub.'
+                        if failures:
+                            st.session_state['warning_msg'] = 'Не удалось загрузить:\n'+'\n'.join(failures)
+                        if successes:
+                            st.rerun()
+                        if failures:
+                            st.warning(st.session_state.pop('warning_msg'))
     with manage_tab:
         st.markdown('#### ▦ Дисциплины в каталоге')
         if not config['courses']:
             st.info('Дисциплин ещё нет. Создай первую в соседней вкладке.')
         for c in config['courses']:
             count = sum(m['course_id'] == c['id'] for m in materials)
-            with st.expander(f'{c.get("icon", "📘")}  {c.get("title_ru", c["id"])} — {count} материалов'):
-                st.write(f'**Қазақша:** {c.get("title_kz", "—")}')
-                st.code(f'materials/uploads/{c["id"]}/ru/\nmaterials/uploads/{c["id"]}/kz/', language='text')
+            with st.expander(f'{c.get("icon", "📘")}  {c.get("title_ru") or c.get("title_kz") or c["id"]} — {count} материалов'):
+                active_languages = list(course_languages(c))
+                st.write('**Языки преподавания:** '+', '.join(LANG_LABELS[l] for l in active_languages))
+                st.code('\n'.join(f'materials/uploads/{c["id"]}/{l}/' for l in active_languages), language='text')
+                selected_mode = ('both' if set(active_languages) == {'ru', 'kz'} else active_languages[0] if active_languages else 'both')
+                new_mode = st.radio('Изменить языки дисциплины', list(TEACHING_LANGUAGES),
+                                    index=list(TEACHING_LANGUAGES).index(selected_mode),
+                                    format_func=lambda mode: TEACHING_LANGUAGES[mode],
+                                    horizontal=True, key='edit_language_'+c['id'])
+                new_languages = ['ru', 'kz'] if new_mode == 'both' else [new_mode]
+                # Adding a language requires its own localized title, not the other language's label.
+                edited_ru = (st.text_input('Название на русском', value=c.get('title_ru', ''),
+                                           key='edit_ru_title_'+c['id'])
+                             if 'ru' in new_languages else c.get('title_ru', ''))
+                edited_kz = (st.text_input('Қазақша атауы', value=c.get('title_kz', ''),
+                                           key='edit_kz_title_'+c['id'])
+                             if 'kz' in new_languages else c.get('title_kz', ''))
+                has_changes = (new_languages != active_languages
+                               or edited_ru.strip() != (c.get('title_ru') or '')
+                               or edited_kz.strip() != (c.get('title_kz') or ''))
+                if has_changes:
+                    st.caption('При отключении языка файлы сохранятся в GitHub, но раздел станет скрыт для студентов.')
+                    if st.button('Сохранить настройки дисциплины', key='save_lang_'+c['id'], type='primary'):
+                        if ('ru' in new_languages and not edited_ru.strip()) or ('kz' in new_languages and not edited_kz.strip()):
+                            st.error('Для каждого включённого языка укажи название дисциплины.')
+                        else:
+                            try:
+                                live = github.read_catalog()
+                                for lang_to_add in new_languages:
+                                    github.ensure_folder(f'materials/uploads/{c["id"]}/{lang_to_add}')
+                                for entry in live.get('courses', []):
+                                    if entry.get('id') == c['id']:
+                                        entry.update(languages=new_languages,
+                                                     title_ru=edited_ru.strip(), title_kz=edited_kz.strip())
+                                github.write_file('catalog.json', (json.dumps(live, ensure_ascii=False, indent=2)+'\n').encode('utf-8'),
+                                                  'StudySpace: update course settings '+c['id'], replace=True)
+                                refresh_data()
+                                st.session_state['success_msg'] = 'Настройки дисциплины сохранены. Файлы сохранены.'
+                                st.rerun()
+                            except GithubError as exc:
+                                st.error(str(exc))
                 st.caption('Удаление из каталога скрывает предмет для студентов, но не стирает файлы из GitHub.')
                 confirm = st.checkbox('Подтверждаю удаление из каталога', key='confirm_delete_'+c['id'])
                 if st.button('Убрать дисциплину', disabled=not confirm, key='delete_course_'+c['id']):
