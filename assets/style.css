@@ -237,3 +237,14 @@ button:disabled{transform:none!important;opacity:.58}
 @keyframes float-doc{0%,100%{transform:translateY(0) rotate(8deg)}50%{transform:translateY(-11px) rotate(10deg)}}
 @keyframes float-doc-alt{0%,100%{transform:translateY(0) rotate(-9deg)}50%{transform:translateY(9px) rotate(-6deg)}}
 @keyframes gentle-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* Explicit teaching-language selection for admins: three clear responsive options. */
+[data-testid="stRadio"] [role="radiogroup"]{display:flex;flex-wrap:wrap;gap:10px;padding:7px 0 13px}
+[data-testid="stRadio"] [role="radiogroup"] label{background:#15233d;border:1px solid #31476a;border-radius:13px;padding:12px 15px;min-height:48px;transition:background .2s,border-color .2s,transform .2s;min-width:0}
+[data-testid="stRadio"] [role="radiogroup"] label:hover{background:#223452;border-color:#8178ea;transform:translateY(-1px)}
+[data-testid="stRadio"] [role="radiogroup"] label:has(input:checked){background:#29284e;border-color:#a799ff;box-shadow:0 0 0 1px rgba(164,146,250,.13)}
+.language-choice-summary{display:flex;align-items:flex-start;gap:15px;background:linear-gradient(120deg,#232851,#163448);border:1px solid #4b5992;border-radius:17px;padding:18px 20px;margin:3px 0 22px}
+.language-choice-summary>span{display:grid;place-items:center;flex:none;width:36px;height:36px;border-radius:11px;background:rgba(162,154,255,.18);color:#c7bcff;font-size:22px}
+.language-choice-summary b{font-size:14px;color:#f1f4ff}
+.language-choice-summary p{font-size:12px;color:#b9c7e4;margin:5px 0 0;line-height:1.65}
+@media(max-width:620px){[data-testid="stRadio"] [role="radiogroup"]{flex-direction:column;align-items:stretch}[data-testid="stRadio"] [role="radiogroup"] label{width:100%}.language-choice-summary{padding:14px;gap:10px}}
