@@ -1,0 +1,85 @@
+{
+  "site_name": "StudySpace",
+  "tagline": "Презентации, лекции и практические материалы в одном месте",
+  "teacher": "Библиотека учебных материалов",
+  "courses": [
+    {
+      "id": "informatics",
+      "title": "Информатика",
+      "description": "Информация, кодирование, устройство компьютера и цифровая грамотность",
+      "icon": "💻",
+      "tone": "blue",
+      "level": "1 курс"
+    },
+    {
+      "id": "algorithms",
+      "title": "Алгоритмизация",
+      "description": "Алгоритмы, блок-схемы, условия и основы программирования",
+      "icon": "🧩",
+      "tone": "mint",
+      "level": "1 курс"
+    },
+    {
+      "id": "java",
+      "title": "Программирование на Java",
+      "description": "Переменные, условия, циклы, массивы и задачи",
+      "icon": "☕",
+      "tone": "orange",
+      "level": "1–2 курс"
+    },
+    {
+      "id": "oop",
+      "title": "Объектно-ориентированное программирование",
+      "description": "Классы, объекты, наследование, полиморфизм",
+      "icon": "🧬",
+      "tone": "purple",
+      "level": "2 курс"
+    },
+    {
+      "id": "databases",
+      "title": "Базы данных",
+      "description": "СУБД, реляционные модели, таблицы и SQL",
+      "icon": "🗄️",
+      "tone": "cyan",
+      "level": "2 курс"
+    },
+    {
+      "id": "software",
+      "title": "Разработка программного обеспечения",
+      "description": "Жизненный цикл ПО, требования, проектирование и тестирование",
+      "icon": "🛠️",
+      "tone": "rose",
+      "level": "2 курс"
+    },
+    {
+      "id": "cms",
+      "title": "Системы управления контентом",
+      "description": "CMS, сайты, структура веб-проектов и публикация материалов",
+      "icon": "🌐",
+      "tone": "yellow",
+      "level": "2 курс"
+    }
+  ],
+  "descriptions": {
+    "informatics/predstavlenie_informacii_ru.md": "Демонстрационная лекция: биты, байты, текст, графика и способы представления данных.",
+    "algorithms/algoritm_zhane_kasietteri_kz.md": "Қазақ тіліндегі қысқаша дәріс: алгоритм ұғымы және оның негізгі қасиеттері.",
+    "java/cikly_v_java_ru.html": "Интерактивная презентация с примерами for, while и do-while.",
+    "java/peremennye_i_tipy_ru.md": "Краткая лекция по типам данных, переменным и операторам Java.",
+    "oop/principy_oop_ru.html": "Интерактивная презентация о четырёх основных принципах ООП.",
+    "oop/klassy_i_obekty_ru.md": "Лекция с простым Java-примером класса и объекта.",
+    "databases/vvedenie_v_bazy_dannyh_ru.md": "Что такое база данных, СУБД, таблица, запись и ключ.",
+    "software/zhiznennyy_cikl_po_ru.md": "Этапы жизненного цикла ПО и основные модели разработки.",
+    "cms/chto_takoe_cms_ru.md": "Определение, структура и популярные сценарии применения CMS."
+  },
+  "titles": {
+    "informatics/predstavlenie_informacii_ru.md": "Представление и кодирование информации",
+    "algorithms/algoritm_zhane_kasietteri_kz.md": "Алгоритм және оның қасиеттері",
+    "java/cikly_v_java_ru.html": "Циклы в Java",
+    "java/peremennye_i_tipy_ru.md": "Переменные и типы данных Java",
+    "oop/principy_oop_ru.html": "Четыре принципа ООП",
+    "oop/klassy_i_obekty_ru.md": "Классы и объекты Java",
+    "databases/vvedenie_v_bazy_dannyh_ru.md": "Введение в базы данных",
+    "software/zhiznennyy_cikl_po_ru.md": "Жизненный цикл программного обеспечения",
+    "cms/chto_takoe_cms_ru.md": "Что такое CMS?"
+  }
+}
