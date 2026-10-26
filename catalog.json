@@ -1,4 +1,14 @@
 {
   "site_name": "StudySpace",
-  "courses": []
+  "courses": [
+    {
+      "id": "kontent-menedzhment-zhuyeleri",
+      "title_ru": "",
+      "title_kz": "Контент-менеджмент жүйелері",
+      "icon": "🌐",
+      "languages": [
+        "kz"
+      ]
+    }
+  ]
 }
