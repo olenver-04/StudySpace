@@ -30,7 +30,7 @@ EMOJIS = ['📘', '💻', '☕', '🧩', '🗄️', '🛠️', '🌐', '📊', '
 
 I18N = {
     'ru': {
-        'home':'Главная', 'library':'Библиотека', 'about':'О платформе', 'choose':'Выбор языка',
+        'home':'Раздел', 'landing':'Заглавная', 'library':'Библиотека', 'about':'О платформе', 'choose':'Выбор языка',
         'hero_head':'Учебные материалы в одном месте.', 'hero_sub':'Лекции и презентации на русском языке — для учёбы, повторения и самостоятельной работы.',
         'hero_tag':'ОБРАЗОВАТЕЛЬНАЯ ПЛАТФОРМА', 'browse':'Открыть библиотеку', 'courses':'Дисциплины',
         'course_sub':'Выбери предмет, чтобы посмотреть лекции и презентации.', 'open':'Открыть предмет',
@@ -47,7 +47,7 @@ I18N = {
         'view':'Просмотр и скачивание', 'quick':'Удобно на компьютере и телефоне',
     },
     'kz': {
-        'home':'Басты бет', 'library':'Кітапхана', 'about':'Платформа туралы', 'choose':'Тілді таңдау',
+        'home':'Бөлім', 'landing':'Басты бет', 'library':'Кітапхана', 'about':'Платформа туралы', 'choose':'Тілді таңдау',
         'hero_head':'Оқу материалдары бір жерде.', 'hero_sub':'Қазақ тіліндегі дәрістер мен презентациялар — білім алу, қайталау және өзіндік жұмыс үшін.',
         'hero_tag':'БІЛІМ БЕРУ ПЛАТФОРМАСЫ', 'browse':'Кітапхананы ашу', 'courses':'Пәндер',
         'course_sub':'Дәрістер мен презентацияларды көру үшін пәнді таңда.', 'open':'Пәнді ашу',
@@ -172,10 +172,14 @@ def sidebar(config: dict, materials: list[dict]) -> None:
         st.markdown('<div class="side-kicker">НАВИГАЦИЯ / NAVIGATION</div>', unsafe_allow_html=True)
         if lang in LANG_LABELS:
             st.markdown(f'<div class="side-language"><span class="side-lang-dot"></span><b>{esc(LANG_LABELS[lang])}</b><span class="lang-chevron">⌄</span></div>', unsafe_allow_html=True)
-            nav = [('home', '⌂', t['home']), ('library', '▦', t['library']), ('about', '◎', t['about'])]
+            nav = [('welcome', '✦', t['landing']), ('home', '⌂', t['home']), ('library', '▦', t['library']), ('about', '◎', t['about'])]
             for page, icon, label in nav:
-                if st.button(f'{icon}   {label}', key=f'nav-{page}', use_container_width=True, type='primary' if active == page else 'secondary'):
-                    route(page)
+                is_active = active == page
+                if st.button(f'{icon}   {label}', key=f'nav-{page}', use_container_width=True, type='primary' if is_active else 'secondary'):
+                    if page == 'welcome':
+                        route('welcome', lang='')
+                    else:
+                        route(page)
             if st.button('⇄   '+t['change_lang'], use_container_width=True, key='nav-change-lang'):
                 route('welcome', lang='')
         else:
@@ -186,14 +190,14 @@ def sidebar(config: dict, materials: list[dict]) -> None:
         if st.button('⚙   Панель преподавателя', use_container_width=True, key='nav-admin', type='primary' if active == 'admin' else 'secondary'):
             route('admin')
         st.markdown('<div class="sidebar-note"><span class="note-spark">✦</span><b>Твоя библиотека знаний</b><p>Лекции, презентации и материалы для самостоятельной подготовки.</p><span class="note-footer">PDF  ·  PPTX  ·  DOCX</span></div>', unsafe_allow_html=True)
-        st.markdown('<div class="sidebar-copy">© 2026 STUDYSPACE <span>V 3.0</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-copy">© 2026 STUDYSPACE <span>V 3.2</span></div>', unsafe_allow_html=True)
 
 
 def welcome() -> None:
     with st.container(border=True):
         st.markdown('<div class="welcome-content"><div class="hero-overline"><span class="pulse-dot"></span> WELCOME TO STUDYSPACE <span class="overline-sep">/</span> EDUCATION HUB</div>'
                     '<div class="welcome-layout"><div class="welcome-copy"><div class="hero-mini">ТВОЁ ПРОСТРАНСТВО ДЛЯ УЧЁБЫ</div><h1>Учиться проще,<br><em>когда всё рядом.</em></h1>'
-                    '<p>Лекции, презентации и полезные материалы собраны в одном удобном месте. Выбери язык — и начни изучение.</p>'
+                    '<p>Лекции, презентации и полезные материалы собраны в одном удобном месте. Выбери язык — и открой нужный раздел обучения.</p>'
                     '<div class="hero-benefits"><span>✦ Без регистрации</span><span>◈ С любого устройства</span><span>↗ Всегда под рукой</span></div></div>'
                     '<div class="welcome-visual" aria-hidden="true"><div class="orbital-line orbital-one"></div><div class="orbital-line orbital-two"></div>'
                     '<div class="floating-doc main-doc"><div class="doc-head"><span></span><span></span><span></span></div><div class="doc-emblem">✳</div><div class="doc-line wide"></div><div class="doc-line"></div><div class="doc-line short"></div></div>'
@@ -610,7 +614,7 @@ def main() -> None:
     sidebar(config, materials)
     page = st.session_state.get('page', 'welcome')
     lang = st.session_state.get('lang', '')
-    top_label = 'ADMIN CONSOLE' if page == 'admin' else ('ҚАЗАҚША' if lang == 'kz' else 'РУССКИЙ' if lang == 'ru' else 'RU / KZ')
+    top_label = 'ADMIN CONSOLE' if page == 'admin' else ('ҚАЗАҚША БӨЛІМ' if lang == 'kz' else 'РУССКИЙ РАЗДЕЛ' if lang == 'ru' else 'RU / KZ')
     st.markdown(f'<div class="top-brand"><span><span class="top-mark">✳</span> STUDYSPACE <span class="top-slash">/</span> EDUCATION HUB</span><span class="top-status"><i></i>{esc(top_label)}</span></div>', unsafe_allow_html=True)
     if error and page == 'admin':
         st.warning('Каталог GitHub временно недоступен. Показана локальная версия. '+error)
