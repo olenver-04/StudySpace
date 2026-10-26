@@ -1,376 +1,516 @@
-"""StudySpace — публичный учебный портал на Streamlit.
+"""StudySpace 2 — bilingual student library + GitHub-backed teacher dashboard.
 
-Материалы автоматически обнаруживаются в materials/uploads/<id дисциплины>/.
-Без БД и без платного API: новые файлы добавляются обычным коммитом в GitHub.
+The public catalog is read from GitHub, and teacher writes happen only after
+server-side password authentication. GitHub credentials stay in st.secrets.
 """
 from __future__ import annotations
 
 import html
+import hmac
 import json
 import mimetypes
-import re
 from collections import Counter
 from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-BASE = Path(__file__).resolve().parent
-UPLOADS = BASE / "materials" / "uploads"
-CSS_FILE = BASE / "assets" / "style.css"
-SUPPORTED = {".pdf", ".pptx", ".ppt", ".docx", ".doc", ".md", ".txt", ".html"}
-PREVIEWABLE_TEXT = {".md", ".txt"}
-
-st.set_page_config(
-    page_title="StudySpace • Учебная библиотека",
-    page_icon="📚",
-    layout="wide",
-    initial_sidebar_state="expanded",
+from github_store import GithubError, GithubStore
+from portal_logic import (
+    ALLOWED_EXTENSIONS, display_course, human_size, parse_materials,
+    safe_filename, slugify, upload_path, valid_slug,
 )
+
+st.set_page_config(page_title='StudySpace — Учебная платформа', page_icon='📚', layout='wide', initial_sidebar_state='expanded')
+BASE = Path(__file__).resolve().parent
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+LANG_LABELS = {'ru': '🇷🇺 Русский', 'kz': '🇰🇿 Қазақша'}
+EMOJIS = ['📘', '💻', '☕', '🧩', '🗄️', '🛠️', '🌐', '📊', '🔬', '🧮', '🎨', '📐', '📚', '⚙️']
+
+I18N = {
+    'ru': {
+        'home':'Главная', 'library':'Библиотека', 'about':'О платформе', 'choose':'Выбор языка',
+        'hero_head':'Учебные материалы в одном месте.', 'hero_sub':'Лекции и презентации на русском языке — для учёбы, повторения и самостоятельной работы.',
+        'hero_tag':'ОБРАЗОВАТЕЛЬНАЯ ПЛАТФОРМА', 'browse':'Открыть библиотеку', 'courses':'Дисциплины',
+        'course_sub':'Выбери предмет, чтобы посмотреть лекции и презентации.', 'open':'Открыть предмет',
+        'materials':'материалов', 'lectures':'лекций', 'presentations':'презентаций',
+        'empty_courses':'Здесь скоро появятся дисциплины', 'empty_desc':'Преподаватель добавит предметы и учебные материалы. Загляни сюда позже.',
+        'catalog_head':'Библиотека материалов', 'catalog_sub':'Поиск по лекциям и презентациям на русском языке.',
+        'search':'Найти материал', 'search_hint':'Введите тему или название файла', 'subject':'Дисциплина', 'all_subjects':'Все дисциплины',
+        'kind':'Тип материала', 'all_kinds':'Любой тип', 'lectures_one':'Лекция', 'presentations_one':'Презентация',
+        'empty_materials':'По выбранным фильтрам материалов нет.', 'open_item':'Открыть материал',
+        'back':'← Назад в библиотеку', 'download':'↓ Скачать материал', 'unavailable':'Материал не найден или удалён.',
+        'preview':'Этот формат можно скачать и открыть на своём устройстве.',
+        'about_head':'О StudySpace', 'about_body':'Выбирай дисциплину, читай лекции, просматривай презентации и скачивай файлы. Для каждого языка материалы хранятся отдельно.',
+        'no_preview':'Предпросмотр не удался. Попробуй скачать файл.', 'change_lang':'Сменить язык',
+        'view':'Просмотр и скачивание', 'quick':'Удобно на компьютере и телефоне',
+    },
+    'kz': {
+        'home':'Басты бет', 'library':'Кітапхана', 'about':'Платформа туралы', 'choose':'Тілді таңдау',
+        'hero_head':'Оқу материалдары бір жерде.', 'hero_sub':'Қазақ тіліндегі дәрістер мен презентациялар — білім алу, қайталау және өзіндік жұмыс үшін.',
+        'hero_tag':'БІЛІМ БЕРУ ПЛАТФОРМАСЫ', 'browse':'Кітапхананы ашу', 'courses':'Пәндер',
+        'course_sub':'Дәрістер мен презентацияларды көру үшін пәнді таңда.', 'open':'Пәнді ашу',
+        'materials':'материал', 'lectures':'дәріс', 'presentations':'презентация',
+        'empty_courses':'Пәндер жақында қосылады', 'empty_desc':'Оқытушы пәндер мен оқу материалдарын қосады. Кейінірек қайта кір.',
+        'catalog_head':'Оқу материалдарының кітапханасы', 'catalog_sub':'Қазақ тіліндегі дәрістер мен презентацияларды іздеу.',
+        'search':'Материалды іздеу', 'search_hint':'Тақырыпты немесе файл атауын енгіз', 'subject':'Пән', 'all_subjects':'Барлық пәндер',
+        'kind':'Материал түрі', 'all_kinds':'Барлық түрі', 'lectures_one':'Дәріс', 'presentations_one':'Презентация',
+        'empty_materials':'Таңдалған сүзгілер бойынша материал табылмады.', 'open_item':'Материалды ашу',
+        'back':'← Кітапханаға оралу', 'download':'↓ Материалды жүктеу', 'unavailable':'Материал табылмады немесе жойылған.',
+        'preview':'Бұл форматты жүктеп алып, құрылғыда ашуға болады.',
+        'about_head':'StudySpace туралы', 'about_body':'Пәнді таңда, дәрістерді оқы, презентацияларды қара және файлдарды жүктеп ал. Әр тілге арналған материалдар бөлек сақталады.',
+        'no_preview':'Алдын ала қарау мүмкін емес. Файлды жүктеп көр.', 'change_lang':'Тілді өзгерту',
+        'view':'Қарау және жүктеу', 'quick':'Компьютер мен телефонда ыңғайлы',
+    },
+}
 
 
 def esc(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
-def load_catalog() -> dict:
-    with (BASE / "catalog.json").open(encoding="utf-8") as f:
-        return json.load(f)
+def secret(name: str, default: str = '') -> str:
+    try:
+        value = st.secrets.get(name, default)
+        return str(value).strip() if value is not None else default
+    except Exception:
+        return default
 
 
-def friendly_filename(stem: str) -> str:
-    stem = re.sub(r"(?i)[_-](?:ru|kz|kk)$", "", stem)
-    return re.sub(r"[_-]+", " ", stem).strip().capitalize()
+def settings() -> tuple[str, str, str]:
+    return (secret('GITHUB_REPO', 'olenver-04/StudySpace'), secret('GITHUB_BRANCH', 'main'), secret('GITHUB_TOKEN'))
 
 
-def detect_language(stem: str) -> str:
-    return "KZ" if re.search(r"(?i)[_-](?:kz|kk)$", stem) else "RU"
+@st.cache_data(ttl=45, show_spinner=False)
+def github_data(repo: str, branch: str, token: str) -> tuple[dict, list[dict]]:
+    github = GithubStore(repo, branch, token)
+    return github.read_catalog(), github.tree()
 
 
-def detect_type(filename: str, suffix: str) -> str:
-    if suffix in {".html", ".ppt", ".pptx"}:
-        return "Презентация"
-    if suffix in {".md", ".txt", ".doc", ".docx"}:
-        return "Лекция"
-    if re.search(r"(?i)lekciya|lektsiya|lecture|лекция|дәріс|daris", filename):
-        return "Лекция"
-    return "Презентация"  # PDF: по умолчанию слайды, если не указано «лекция».
+@st.cache_data(ttl=3600, show_spinner=False)
+def material_bytes(repo: str, branch: str, path: str, sha: str) -> bytes:
+    return GithubStore(repo, branch).raw_bytes(path, sha)
 
 
-def file_size(num: int) -> str:
-    if num < 1024 * 1024:
-        return f"{max(1, round(num / 1024))} КБ"
-    return f"{num / (1024 * 1024):.1f} МБ"
+def refresh_data() -> None:
+    github_data.clear()
+    material_bytes.clear()
 
 
-def get_materials(config: dict) -> list[dict]:
-    items: list[dict] = []
-    for course in config["courses"]:
-        slug = course["id"]
-        # catalog.json — доверенный код проекта, но пути всё равно ограничены папкой uploads.
-        if not re.fullmatch(r"[a-z0-9_-]+", slug):
-            continue
-        folder = UPLOADS / slug
-        if not folder.exists():
-            continue
-        for path in sorted(folder.iterdir(), key=lambda p: p.name.casefold()):
-            if not path.is_file() or path.suffix.lower() not in SUPPORTED:
-                continue
-            suffix = path.suffix.lower()
-            key = f"{slug}/{path.name}"
-            items.append({
-                "id": key,
-                "path": path,
-                "title": config.get("titles", {}).get(key, friendly_filename(path.stem)),
-                "description": config.get("descriptions", {}).get(
-                    key, f"Учебный материал по дисциплине «{course['title']}»."
-                ),
-                "course": course,
-                "kind": detect_type(path.stem, suffix),
-                "lang": detect_language(path.stem),
-                "extension": suffix[1:].upper(),
-                "size": file_size(path.stat().st_size),
-            })
-    return items
+def retrieve() -> tuple[dict, list[dict], str | None]:
+    repo, branch, token = settings()
+    try:
+        config, tree = github_data(repo, branch, token)
+        if not isinstance(config.get('courses'), list):
+            raise GithubError('Неверный формат catalog.json.')
+        return config, parse_materials(tree, config['courses']), None
+    except (GithubError, ValueError, KeyError, TypeError) as exc:
+        # A failed remote read must never show made-up remote materials.
+        try:
+            local = json.loads((BASE / 'catalog.json').read_text(encoding='utf-8'))
+        except Exception:
+            local = {'site_name': 'StudySpace', 'courses': []}
+        return local, [], str(exc)
 
 
-def go(page: str, *, course: str | None = None, item: str | None = None) -> None:
-    st.session_state.page = page
-    if course is not None:
-        st.session_state.subject_filter = course
-    if item is not None:
-        st.session_state.item = item
-        st.query_params["material"] = item
-    else:
-        st.query_params.clear()
+def route(page: str, *, lang: str | None = None, course: str = '', material: str = '') -> None:
+    if lang is not None:
+        st.session_state['lang'] = lang
+    st.session_state['page'] = page
+    st.session_state['course'] = course
+    st.session_state['material'] = material
+    st.query_params.clear()
+    if st.session_state.get('lang') in LANG_LABELS:
+        st.query_params['lang'] = st.session_state['lang']
+    if page == 'reader' and material:
+        st.query_params['material'] = material
     st.rerun()
 
 
-def pill(text: str, tone: str = "") -> str:
-    return f'<span class="tag {esc(tone)}">{esc(text)}</span>'
+def style() -> None:
+    st.markdown('<style>'+(BASE/'assets/style.css').read_text(encoding='utf-8')+'</style>', unsafe_allow_html=True)
 
 
-def heading(title: str, subtitle: str = "") -> None:
+def header(title: str, subtitle: str = '', eyebrow: str = '') -> None:
     st.markdown(
-        f'<div class="section-title"><h2>{esc(title)}</h2>'
-        + (f"<p>{esc(subtitle)}</p>" if subtitle else "")
-        + "</div>",
-        unsafe_allow_html=True,
+        f'<div class="heading-block">'
+        + (f'<span class="eyebrow">{esc(eyebrow)}</span>' if eyebrow else '')
+        + f'<h2>{esc(title)}</h2>'
+        + (f'<p>{esc(subtitle)}</p>' if subtitle else '') + '</div>', unsafe_allow_html=True,
     )
 
 
-def course_card(course: dict, count: int) -> None:
-    with st.container(border=True):
-        st.markdown(
-            f'<div class="course-content">'
-            f'<div class="course-icon {esc(course["tone"])}">{esc(course["icon"])}</div>'
-            f'<div class="course-info">{pill(course["level"])}<span class="course-count">{count} материалов</span></div>'
-            f'<h3>{esc(course["title"])}</h3>'
-            f'<p>{esc(course["description"])}</p></div>',
-            unsafe_allow_html=True,
-        )
-        if st.button("Открыть дисциплину  →", key="course_" + course["id"], use_container_width=True):
-            go("library", course=course["id"])
+def badge(text: str, variant: str = '') -> str:
+    return f'<span class="badge-text {esc(variant)}">{esc(text)}</span>'
 
 
-def material_card(item: dict, keyprefix: str = "") -> None:
-    badge_kind = "is-presentation" if item["kind"] == "Презентация" else "is-lecture"
-    with st.container(border=True):
-        st.markdown(
-            f'<div class="material-content">'
-            f'<div class="material-meta">{pill(item["kind"], badge_kind)}{pill(item["lang"])}{pill(item["extension"])}</div>'
-            f'<div class="material-course">{esc(item["course"]["title"])}</div>'
-            f'<h3>{esc(item["title"])}</h3>'
-            f'<p>{esc(item["description"])}</p>'
-            f'<div class="material-size">↳ {esc(item["size"])} · для просмотра и скачивания</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        if st.button("Открыть материал  →", key=f"open_{keyprefix}_{item['id']}", use_container_width=True):
-            go("reader", item=item["id"])
-
-
-def render_home(config: dict, materials: list[dict]) -> None:
-    counts = Counter(i["course"]["id"] for i in materials)
-    st.markdown(
-        '<div class="hero">'
-        '<div class="hero-glow"></div>'
-        '<span class="hero-eyebrow"><span class="live-dot"></span> ОБРАЗОВАТЕЛЬНАЯ ПЛАТФОРМА</span>'
-        '<h1>Знания всегда <span>под рукой.</span></h1>'
-        '<p>Все лекции, презентации и полезные материалы по специальным дисциплинам — '
-        'в удобной цифровой библиотеке. Открывай, изучай, скачивай.</p>'
-        '<div class="hero-chips"><span>✦ Учись в своём темпе</span><span>↗ Открывай с телефона</span>'
-        '<span>↓ Сохраняй материалы</span></div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    a, b, _ = st.columns([1.1, 1.1, 2], gap="small")
-    with a:
-        if st.button("Смотреть все материалы  →", type="primary", key="hero_browse", use_container_width=True):
-            go("library", course="all")
-    with b:
-        if st.button("Выбрать дисциплину  ↓", key="hero_subjects", use_container_width=True):
-            st.session_state.page = "library"
-            st.session_state.subject_filter = "all"
-            st.rerun()
-
-    presentations = sum(m["kind"] == "Презентация" for m in materials)
-    lectures = sum(m["kind"] == "Лекция" for m in materials)
-    st.markdown(
-        '<div class="stats">'
-        f'<div class="stat"><b>{len(config["courses"]):02d}</b><span>дисциплин</span></div>'
-        f'<div class="stat"><b>{len(materials):02d}</b><span>учебных материалов</span></div>'
-        f'<div class="stat"><b>{presentations:02d}</b><span>презентаций</span></div>'
-        f'<div class="stat"><b>{lectures:02d}</b><span>лекций</span></div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    heading("Выбери дисциплину", "Все материалы распределены по предметам, чтобы нужное было легко найти.")
-    columns = st.columns(3, gap="medium")
-    for idx, course in enumerate(config["courses"]):
-        with columns[idx % 3]:
-            course_card(course, counts[course["id"]])
-
-    heading("С чего начать", "Несколько материалов, которые уже можно открыть прямо на сайте.")
-    featured = [m for m in materials if m["extension"] == "HTML"][:2]
-    featured += [m for m in materials if m["extension"] == "MD"][:1]
-    featured_columns = st.columns(3, gap="medium")
-    for idx, item in enumerate(featured):
-        with featured_columns[idx]:
-            material_card(item, "featured")
-
-
-def render_library(config: dict, materials: list[dict]) -> None:
-    st.markdown('<span class="eyebrow">КАТАЛОГ / STUDYSPACE</span>', unsafe_allow_html=True)
-    heading("Библиотека материалов", "Ищи по названию и предмету, выбирай язык и формат.")
-    course_names = {"all": "Все дисциплины", **{c["id"]: c["title"] for c in config["courses"]}}
-    st.session_state.setdefault("subject_filter", "all")
-    if st.session_state.subject_filter not in course_names:
-        st.session_state.subject_filter = "all"
-    search_col, subject_col = st.columns([1.5, 1], gap="medium")
-    with search_col:
-        query = st.text_input("Поиск по материалам", placeholder="Например, циклы Java, SQL или ООП...", key="query")
-    with subject_col:
-        subject = st.selectbox(
-            "Дисциплина", list(course_names),
-            format_func=lambda c: course_names[c],
-            key="subject_filter",
-        )
-    kind_col, lang_col, sort_col = st.columns(3, gap="medium")
-    with kind_col:
-        kind = st.selectbox("Тип материала", ["Все форматы", "Презентация", "Лекция"])
-    with lang_col:
-        lang = st.selectbox("Язык", ["Любой язык", "RU", "KZ"])
-    with sort_col:
-        sort = st.selectbox("Сортировка", ["По названию", "По дисциплине", "По формату"])
-    q = query.strip().casefold()
-    filtered = [
-        m for m in materials
-        if (subject == "all" or m["course"]["id"] == subject)
-        and (kind == "Все форматы" or m["kind"] == kind)
-        and (lang == "Любой язык" or m["lang"] == lang)
-        and (not q or q in " ".join((m["title"], m["description"], m["course"]["title"], m["path"].name)).casefold())
-    ]
-    if sort == "По названию":
-        filtered.sort(key=lambda m: m["title"].casefold())
-    elif sort == "По дисциплине":
-        filtered.sort(key=lambda m: (m["course"]["title"], m["title"]))
+def initial_route(materials: list[dict]) -> None:
+    if 'page' in st.session_state:
+        return
+    lang = st.query_params.get('lang', '')
+    material_id = st.query_params.get('material', '')
+    found = next((i for i in materials if i['id'] == material_id), None)
+    if found:
+        st.session_state.update(page='reader', lang=found['lang'], course=found['course_id'], material=material_id)
+    elif lang in LANG_LABELS:
+        st.session_state.update(page='home', lang=lang, course='', material='')
     else:
-        filtered.sort(key=lambda m: (m["kind"], m["title"]))
-    st.markdown(
-        f'<div class="results">Найдено материалов: <strong>{len(filtered)}</strong></div>',
-        unsafe_allow_html=True,
-    )
-    if not filtered:
-        st.info("По этим фильтрам материалов пока нет. Попробуй другой запрос или дисциплину.")
-        if st.button("Показать всё"):
-            st.session_state.subject_filter = "all"
-            st.session_state.query = ""
-            st.rerun()
-        return
-    columns = st.columns(2, gap="medium")
-    for idx, item in enumerate(filtered):
-        with columns[idx % 2]:
-            material_card(item, "catalog")
+        st.session_state.update(page='welcome', lang='', course='', material='')
 
 
-def render_reader(materials: list[dict], item_id: str) -> None:
-    item = next((x for x in materials if x["id"] == item_id), None)
-    if not item:
-        st.warning("Этот материал не найден. Возможно, файл переименовали или удалили.")
-        if st.button("← Вернуться в библиотеку"):
-            go("library")
-        return
-    if st.button("← Назад к материалам", key="back_to_catalog"):
-        go("library", course=item["course"]["id"])
-    st.markdown(
-        f'<div class="reader-head"><span class="eyebrow">{esc(item["course"]["title"])} / {esc(item["kind"])}</span>'
-        f'<h1>{esc(item["title"])}</h1>'
-        f'<p>{esc(item["description"])}</p><div class="material-meta">'
-        f'{pill(item["kind"])}{pill(item["lang"])}{pill(item["extension"])}{pill(item["size"])}'
-        f'</div></div>',
-        unsafe_allow_html=True,
-    )
-    path = item["path"]
-    suffix = path.suffix.lower()
-    if suffix == ".html":
-        components.html(path.read_text(encoding="utf-8"), height=600, scrolling=False)
-        st.caption("Интерактивная презентация: переключай слайды стрелками, кнопками или свайпом. Значок ⛶ откроет её на весь экран.")
-    elif suffix == ".pdf":
-        try:
-            st.pdf(str(path), height=700)
-        except Exception:
-            st.info("Предпросмотр PDF недоступен в этой среде. Скачай файл по кнопке ниже.")
-    elif suffix in PREVIEWABLE_TEXT:
+def sidebar(config: dict, materials: list[dict]) -> None:
+    lang = st.session_state.get('lang')
+    t = I18N.get(lang, I18N['ru'])
+    with st.sidebar:
+        st.markdown('<div class="brand"><span class="brand-icon">✳</span><div><b>StudySpace</b><small>EDUCATION HUB</small></div></div>', unsafe_allow_html=True)
+        if lang in LANG_LABELS:
+            st.markdown(f'<div class="side-language">{esc(LANG_LABELS[lang])}</div>', unsafe_allow_html=True)
+            if st.button('⌂  '+t['home'], use_container_width=True, key='navhome'):
+                route('home')
+            if st.button('▦  '+t['library'], use_container_width=True, key='navlibrary'):
+                route('library')
+            if st.button('ⓘ  '+t['about'], use_container_width=True, key='navabout'):
+                route('about')
+            if st.button('⇄  '+t['change_lang'], use_container_width=True, key='navlang'):
+                route('welcome', lang='')
+        else:
+            if st.button('🌐  Русский / Қазақша', use_container_width=True, key='navlangchoose'):
+                route('welcome', lang='')
+        st.markdown('<div class="sidebar-rule"></div>', unsafe_allow_html=True)
+        if st.button('🔐  Панель преподавателя', use_container_width=True, key='navadmin'):
+            route('admin')
+        st.markdown('<div class="sidebar-tip">📚 <b>StudySpace</b><p>Лекции и презентации в одной цифровой библиотеке.</p></div>', unsafe_allow_html=True)
+        st.caption('StudySpace © 2026')
+
+
+def welcome() -> None:
+    st.markdown('<div class="welcome-hero"><span class="eyebrow">STUDYSPACE • EDUCATION HUB</span>'
+                '<h1>Выберите язык обучения</h1><p>Один портал — две отдельные библиотеки материалов. Выберите удобный язык и переходите к дисциплинам.</p></div>',
+                unsafe_allow_html=True)
+    left, right = st.columns(2, gap='large')
+    with left:
         with st.container(border=True):
-            text = path.read_text(encoding="utf-8")
-            if suffix == ".md":
+            st.markdown('<div class="language-card"><span class="language-icon">🇷🇺</span><h3>Русский язык</h3><p>Лекции, презентации и дополнительные материалы на русском языке.</p></div>', unsafe_allow_html=True)
+            if st.button('Перейти к материалам →', type='primary', use_container_width=True, key='choose_ru'):
+                route('home', lang='ru')
+    with right:
+        with st.container(border=True):
+            st.markdown('<div class="language-card"><span class="language-icon">🇰🇿</span><h3>Қазақ тілі</h3><p>Қазақ тіліндегі дәрістер, презентациялар және оқу материалдары.</p></div>', unsafe_allow_html=True)
+            if st.button('Материалдарға өту →', type='primary', use_container_width=True, key='choose_kz'):
+                route('home', lang='kz')
+    st.markdown('<div class="welcome-tip">✦ На сайте не требуется регистрация для студентов · Студенттерге тіркелу қажет емес</div>', unsafe_allow_html=True)
+
+
+def course_card(course: dict, lang: str, items: list[dict]) -> None:
+    t = I18N[lang]
+    count = sum(m['lang'] == lang and m['course_id'] == course['id'] for m in items)
+    with st.container(border=True):
+        st.markdown(f'<div class="course-card-body"><div class="course-emoji">{esc(course.get("icon","📘"))}</div>'
+                    f'<div class="course-meta">{esc(count)} {esc(t["materials"])}</div>'
+                    f'<h3>{esc(display_course(course, lang))}</h3>'
+                    f'</div>', unsafe_allow_html=True)
+        if st.button(t['open']+' →', use_container_width=True, key=f'course_{lang}_{course["id"]}'):
+            route('library', course=course['id'])
+
+
+def card(item: dict, lang: str, prefix: str = '') -> None:
+    t = I18N[lang]
+    kindtext = t['lectures_one'] if item['kind'] == 'lectures' else t['presentations_one']
+    with st.container(border=True):
+        st.markdown('<div class="material-card-body">'
+                    + f'<div class="material-meta">{badge(kindtext, "lecture" if item["kind"] == "lectures" else "presentation")}{badge(item["extension"].lstrip(".").upper())}</div>'
+                    + f'<span class="material-course">{esc(display_course(item["course"], lang))}</span>'
+                    + f'<h3>{esc(item["title"])}</h3><p>{esc(human_size(item["size"]))} · {esc(t["view"])}</p></div>', unsafe_allow_html=True)
+        if st.button(t['open_item']+' →', use_container_width=True, key=f'item_{prefix}_{item["id"]}'):
+            route('reader', course=item['course_id'], material=item['id'])
+
+
+def home(config: dict, materials: list[dict], lang: str) -> None:
+    t = I18N[lang]
+    visible = [m for m in materials if m['lang'] == lang]
+    total_lectures = sum(i['kind'] == 'lectures' for i in visible)
+    total_presentations = len(visible)-total_lectures
+    st.markdown(f'<div class="hero"><span class="eyebrow">✦ {esc(t["hero_tag"])}</span>'
+                f'<h1>{esc(t["hero_head"])}</h1><p>{esc(t["hero_sub"])}</p>'
+                '<div class="hero-chips"><span>📘 StudySpace</span><span>🌐 RU / KZ</span><span>⬇ PDF · PPTX · DOCX</span></div></div>',
+                unsafe_allow_html=True)
+    st.write('')
+    if st.button(t['browse']+' →', type='primary', key='hero_browse', use_container_width=False):
+        route('library')
+    st.markdown(f'<div class="stat-strip">'
+                f'<div><b>{len(config["courses"])}</b><span>{esc(t["courses"])}</span></div>'
+                f'<div><b>{len(visible)}</b><span>{esc(t["materials"])}</span></div>'
+                f'<div><b>{total_lectures}</b><span>{esc(t["lectures"])}</span></div>'
+                f'<div><b>{total_presentations}</b><span>{esc(t["presentations"])}</span></div>'
+                f'</div>', unsafe_allow_html=True)
+    header(t['courses'], t['course_sub'])
+    if not config['courses']:
+        empty(t['empty_courses'], t['empty_desc'])
+        return
+    cols = st.columns(3, gap='medium')
+    for index, course in enumerate(config['courses']):
+        with cols[index % 3]:
+            course_card(course, lang, materials)
+
+
+def empty(title: str, subtitle: str) -> None:
+    st.markdown(f'<div class="empty-state"><div>📭</div><h3>{esc(title)}</h3><p>{esc(subtitle)}</p></div>', unsafe_allow_html=True)
+
+
+def library(config: dict, materials: list[dict], lang: str) -> None:
+    t = I18N[lang]
+    header(t['catalog_head'], t['catalog_sub'], 'STUDYSPACE / '+LANG_LABELS[lang])
+    if not config['courses']:
+        empty(t['empty_courses'], t['empty_desc'])
+        return
+    courses = config['courses']
+    options = ['all']+[c['id'] for c in courses]
+    current = st.session_state.get('course', '')
+    if current not in options:
+        current = 'all'
+    a, b = st.columns([1.3, 1], gap='medium')
+    with a:
+        query = st.text_input(t['search'], placeholder=t['search_hint'], key=f'catalog_search_{lang}')
+    with b:
+        selected_course = st.selectbox(t['subject'], options, index=options.index(current),
+                                       format_func=lambda slug: t['all_subjects'] if slug == 'all' else display_course(next(c for c in courses if c['id'] == slug), lang),
+                                       key=f'course_selector_{lang}')
+    kind = st.selectbox(t['kind'], ['all', 'lectures', 'presentations'],
+                        format_func=lambda key: {'all':t['all_kinds'], 'lectures':t['lectures_one'], 'presentations':t['presentations_one']}[key],
+                        key=f'kind_selector_{lang}')
+    query = query.strip().casefold()
+    filtered = [m for m in materials if m['lang'] == lang and (selected_course == 'all' or m['course_id'] == selected_course)
+                and (kind == 'all' or m['kind'] == kind)
+                and (not query or query in (m['title']+' '+display_course(m['course'],lang)+' '+m['filename']).casefold())]
+    st.markdown(f'<p class="result-count">{esc(t["materials"])}: <b>{len(filtered)}</b></p>', unsafe_allow_html=True)
+    if not filtered:
+        empty(t['empty_materials'], t['course_sub'])
+        return
+    cols = st.columns(2, gap='medium')
+    for n, material in enumerate(filtered):
+        with cols[n % 2]:
+            card(material, lang, 'library')
+
+
+def reader(materials: list[dict], lang: str) -> None:
+    t = I18N[lang]
+    item_id = st.session_state.get('material', '')
+    item = next((m for m in materials if m['id'] == item_id), None)
+    if not item:
+        st.warning(t['unavailable'])
+        if st.button(t['back']):
+            route('library')
+        return
+    if item['lang'] != lang:
+        lang = item['lang']; t = I18N[lang]
+    if st.button(t['back'], key='back_reader'):
+        route('library', lang=lang, course=item['course_id'])
+    header(item['title'], display_course(item['course'], lang), t['lectures_one'] if item['kind'] == 'lectures' else t['presentations_one'])
+    st.markdown(f'<div class="reader-tags">{badge(item["extension"].lstrip(".").upper())}{badge(LANG_LABELS[lang])}{badge(human_size(item["size"]))}</div>', unsafe_allow_html=True)
+    repo, branch, _ = settings()
+    try:
+        filedata = material_bytes(repo, branch, item['path'], item['sha'])
+    except GithubError as exc:
+        st.error(str(exc))
+        return
+    suffix = item['extension']
+    if suffix == '.pdf':
+        try:
+            st.pdf(filedata, height=680)
+        except Exception:
+            st.info(t['no_preview'])
+    elif suffix in ('.md', '.txt'):
+        with st.container(border=True):
+            text = filedata.decode('utf-8-sig', errors='replace')
+            if suffix == '.md':
                 st.markdown(text)
             else:
                 st.text(text)
+    elif suffix == '.html':
+        components.html(filedata.decode('utf-8-sig', errors='replace'), height=650, scrolling=True)
     else:
-        st.info(f"Файл {item['extension']} можно скачать и открыть в подходящей программе. Просмотр этого формата на сайте не предусмотрен.")
-
-    mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    st.download_button(
-        "↓ Скачать материал",
-        data=path.read_bytes(),
-        file_name=path.name,
-        mime=mime,
-        key="download_" + item["id"],
-        use_container_width=True,
-        type="primary",
-    )
-    st.caption("Можно отправить одногруппникам ссылку на этот материал, скопировав адрес страницы в браузере.")
-    related = [x for x in materials if x["course"]["id"] == item["course"]["id"] and x["id"] != item_id][:2]
-    if related:
-        heading("Ещё по этой дисциплине")
-        cols = st.columns(2)
-        for idx, m in enumerate(related):
-            with cols[idx]:
-                material_card(m, "related")
+        st.info(t['preview'])
+    st.download_button(t['download'], filedata, file_name=item['filename'],
+                       mime=mimetypes.guess_type(item['filename'])[0] or 'application/octet-stream',
+                       type='primary', use_container_width=True, key='reader_download')
+    st.caption('StudySpace · '+t['quick'])
 
 
-def render_about(config: dict) -> None:
-    st.markdown('<span class="eyebrow">ОБРАЗОВАТЕЛЬНЫЙ ПРОЕКТ</span>', unsafe_allow_html=True)
-    heading("О библиотеке", "Коротко о том, как пользоваться учебным порталом.")
-    with st.container(border=True):
-        st.markdown("""
-### Для студентов
-
-Зайди в **Библиотеку**, выбери дисциплину и найди нужную тему. Лекции Markdown доступны для чтения прямо на странице; PDF и интерактивные HTML-презентации можно просматривать в браузере. Любой материал можно скачать для самостоятельной работы.
-
-### Для преподавателя
-
-Чтобы добавить файл, открой репозиторий на GitHub и перейди в `materials/uploads/`. Затем выбери папку нужной дисциплины и добавь `.pdf`, `.pptx`, `.docx`, `.md`, `.txt` или `.html`. После сохранения коммита и обновления сайта новая карточка появится автоматически.
-
-**Важно:** это публичная библиотека без регистрации. Размещай только учебные материалы, которые можно свободно показывать студентам. Временное хранилище самого Streamlit не используется для загрузок, поэтому файлы не пропадают после перезапуска приложения.
-""")
-    st.markdown(f'<div class="muted-note">{esc(config["site_name"])} · создано на Streamlit</div>', unsafe_allow_html=True)
+def about(lang: str) -> None:
+    t = I18N[lang]
+    header(t['about_head'], t['about_body'])
+    st.info('📖 '+t['quick'])
 
 
-def sidebar(config: dict, total: int) -> None:
-    with st.sidebar:
-        st.markdown(
-            '<div class="side-brand"><div class="side-logo">✳</div>'
-            '<div><b>StudySpace</b><small>EDUCATION HUB</small></div></div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown('<div class="side-label">НАВИГАЦИЯ</div>', unsafe_allow_html=True)
-        for key, label in (("home", "⌂  Главная"), ("library", "▦  Библиотека"), ("about", "ⓘ  О портале")):
-            if st.button(label, use_container_width=True, key=f"nav_{key}"):
-                go(key)
-        st.markdown('<div class="side-label space-top">УЧЕБНЫЙ КОНТЕНТ</div>', unsafe_allow_html=True)
-        st.markdown(
-            f'<div class="side-note"><b>{len(config["courses"])} дисциплин · {total} материалов</b>'
-            '<p>Всё для самостоятельной подготовки и повторения тем.</p>'
-            '<span>📖 Лекции &nbsp;·&nbsp; 🖥 Презентации</span></div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown('<div class="side-footer">Доступно с телефона и компьютера<br>StudySpace © 2026</div>', unsafe_allow_html=True)
+def flash() -> None:
+    for key, fn in [('success_msg', st.success), ('warning_msg', st.warning)]:
+        message = st.session_state.pop(key, None)
+        if message:
+            fn(message)
+
+
+def admin(config: dict, materials: list[dict]) -> None:
+    header('Панель преподавателя', 'Управление дисциплинами и учебными файлами в GitHub.', '🔐 ТОЛЬКО ДЛЯ ПРЕПОДАВАТЕЛЯ')
+    admin_password = secret('ADMIN_PASSWORD')
+    token = secret('GITHUB_TOKEN')
+    repo, branch, _ = settings()
+    if not admin_password:
+        st.warning('Панель пока не настроена. Сначала добавь ADMIN_PASSWORD и GITHUB_TOKEN в Settings → Secrets приложения на Streamlit Cloud.')
+        st.code('ADMIN_PASSWORD = "придумай-длинный-пароль"\nGITHUB_TOKEN = "github_pat_..."\nGITHUB_REPO = "olenver-04/StudySpace"\nGITHUB_BRANCH = "main"', language='toml')
+        st.caption('Токен должен иметь Contents: Read and write только для StudySpace. Не публикуй его в GitHub.')
+        return
+    if not st.session_state.get('admin_ok', False):
+        with st.form('login_form'):
+            pwd = st.text_input('Пароль администратора', type='password')
+            submit = st.form_submit_button('Войти', type='primary', use_container_width=True)
+        if submit:
+            if hmac.compare_digest(pwd.encode('utf-8'), admin_password.encode('utf-8')):
+                st.session_state['admin_ok'] = True
+                st.rerun()
+            else:
+                st.error('Неверный пароль.')
+        return
+    top, out = st.columns([4, 1])
+    with top:
+        st.caption(f'🟢 Вход выполнен · Репозиторий: {repo} · Ветка: {branch}')
+    with out:
+        if st.button('Выйти', use_container_width=True, key='logout'):
+            st.session_state['admin_ok'] = False
+            route('welcome', lang='')
+    flash()
+    if not token:
+        st.error('Добавь GITHUB_TOKEN в секреты Streamlit Cloud: без токена создавать дисциплины и загружать файлы нельзя.')
+        return
+    github = GithubStore(repo, branch, token)
+    stats = st.columns(3, gap='medium')
+    stats[0].metric('Дисциплин', len(config['courses']))
+    stats[1].metric('Лекций', sum(m['kind'] == 'lectures' for m in materials))
+    stats[2].metric('Презентаций', sum(m['kind'] == 'presentations' for m in materials))
+    create_tab, upload_tab, manage_tab = st.tabs(['＋ Создать дисциплину', '↑ Загрузить материалы', '▦ Мои дисциплины'])
+    with create_tab:
+        st.markdown('#### Новая дисциплина')
+        st.caption('Создаст папки ru и kz в GitHub. Названия будут отображаться на выбранном языке.')
+        with st.form('create_course', clear_on_submit=True):
+            title_ru = st.text_input('Название на русском *', placeholder='Например: Программирование на Java')
+            title_kz = st.text_input('Қазақша атауы *', placeholder='Мысалы: Java бағдарламалау')
+            slug_override = st.text_input('Название папки латиницей (необязательно)', placeholder='Например: java')
+            icon = st.selectbox('Иконка дисциплины', EMOJIS)
+            created = st.form_submit_button('＋ Создать дисциплину', type='primary', use_container_width=True)
+        if created:
+            course_id = (slug_override.strip().lower() or slugify(title_ru))
+            if not title_ru.strip() or not title_kz.strip():
+                st.error('Заполни названия на обоих языках.')
+            elif not valid_slug(course_id):
+                st.error('Название папки: только латинские буквы, цифры и дефис (до 65 символов).')
+            else:
+                try:
+                    live = github.read_catalog()
+                    if any(c.get('id') == course_id for c in live.get('courses', [])):
+                        st.error('Дисциплина с такой папкой уже существует. Используй другое название.')
+                    else:
+                        # Git does not track empty folders: .gitkeep ensures both show up immediately.
+                        github.ensure_folder(f'materials/uploads/{course_id}/ru')
+                        github.ensure_folder(f'materials/uploads/{course_id}/kz')
+                        live.setdefault('courses', []).append({'id':course_id, 'title_ru':title_ru.strip(),
+                                                               'title_kz':title_kz.strip(), 'icon':icon})
+                        github.write_file('catalog.json', (json.dumps(live, ensure_ascii=False, indent=2)+'\n').encode('utf-8'),
+                                          'StudySpace: add course '+course_id, replace=True)
+                        refresh_data()
+                        st.session_state['success_msg'] = f'✅ Дисциплина «{title_ru.strip()}» создана. Папки ru и kz появились в GitHub.'
+                        st.rerun()
+                except GithubError as exc:
+                    st.error(f'Не удалось завершить создание: {exc}. Если папки уже появились, повтори создание — они не пропадут.')
+    with upload_tab:
+        st.markdown('#### Новые лекции и презентации')
+        if not config['courses']:
+            st.info('Сначала создай хотя бы одну дисциплину.')
+        else:
+            with st.form('upload_files', clear_on_submit=False):
+                course = st.selectbox('Дисциплина *', config['courses'],
+                                      format_func=lambda c: c['title_ru']+' / '+c.get('title_kz',''))
+                language = st.radio('Язык материала *', ['ru', 'kz'], format_func=lambda v: LANG_LABELS[v], horizontal=True)
+                kind = st.radio('Что загружаем? *', ['lectures', 'presentations'],
+                                format_func=lambda k: '📖 Лекция' if k == 'lectures' else '🖥 Презентация', horizontal=True)
+                files = st.file_uploader('Добавить файлы', accept_multiple_files=True,
+                                         type=[s[1:] for s in sorted(ALLOWED_EXTENSIONS)],
+                                         help='PDF, PPTX, DOCX, DOC, PPT, MD, TXT, HTML. До 20 МБ на файл.')
+                replace = st.checkbox('Заменять файлы с тем же названием', value=False)
+                uploaded = st.form_submit_button('↑ Опубликовать материалы', type='primary', use_container_width=True)
+            if uploaded:
+                if not files:
+                    st.warning('Выбери хотя бы один файл.')
+                else:
+                    successes, failures = [], []
+                    for file in files:
+                        try:
+                            if file.size > MAX_UPLOAD_BYTES:
+                                raise ValueError('Файл больше 20 МБ.')
+                            filename = safe_filename(file.name)
+                            path = upload_path(course['id'], language, kind, filename)
+                            github.write_file(path, file.getvalue(), 'StudySpace: upload '+path, replace=replace)
+                            successes.append(filename)
+                        except (GithubError, ValueError) as exc:
+                            failures.append(f'{file.name}: {exc}')
+                    if successes:
+                        refresh_data()
+                        st.session_state['success_msg'] = f'✅ Загружено файлов: {len(successes)}. Они уже сохранены в GitHub.'
+                    if failures:
+                        st.session_state['warning_msg'] = 'Не удалось загрузить:\n'+'\n'.join(failures)
+                    if successes:
+                        st.rerun()
+                    if failures:
+                        st.warning(st.session_state.pop('warning_msg'))
+    with manage_tab:
+        st.markdown('#### Дисциплины в каталоге')
+        if not config['courses']:
+            st.info('Дисциплин ещё нет. Создай первую в соседней вкладке.')
+        for c in config['courses']:
+            count = sum(m['course_id'] == c['id'] for m in materials)
+            with st.expander(f'{c.get("icon", "📘")}  {c.get("title_ru", c["id"])} — {count} материалов'):
+                st.write(f'**Қазақша:** {c.get("title_kz", "—")}')
+                st.code(f'materials/uploads/{c["id"]}/ru/\nmaterials/uploads/{c["id"]}/kz/', language='text')
+                st.caption('Удаление из каталога скрывает предмет для студентов, но не стирает файлы из GitHub.')
+                confirm = st.checkbox('Подтверждаю удаление из каталога', key='confirm_delete_'+c['id'])
+                if st.button('Убрать дисциплину', disabled=not confirm, key='delete_course_'+c['id']):
+                    try:
+                        live = github.read_catalog()
+                        live['courses'] = [x for x in live.get('courses',[]) if x['id'] != c['id']]
+                        github.write_file('catalog.json', (json.dumps(live,ensure_ascii=False,indent=2)+'\n').encode('utf-8'),
+                                          'StudySpace: hide course '+c['id'], replace=True)
+                        refresh_data()
+                        st.session_state['success_msg']='Дисциплина скрыта из каталога. Файлы в GitHub сохранены.'
+                        st.rerun()
+                    except GithubError as exc:
+                        st.error(str(exc))
+        st.caption('Открыть GitHub: '+f'https://github.com/{repo}/tree/{branch}/materials/uploads')
 
 
 def main() -> None:
-    st.markdown(f"<style>{CSS_FILE.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
-    config = load_catalog()
-    materials = get_materials(config)
-    if "page" not in st.session_state:
-        share_item = st.query_params.get("material")
-        st.session_state.page = "reader" if share_item else "home"
-        st.session_state.item = share_item or ""
-    sidebar(config, len(materials))
-    st.markdown('<div class="top-line"><span>✳ STUDYSPACE</span><span>УЧИСЬ · ПРАКТИКУЙСЯ · РАЗВИВАЙСЯ</span></div>', unsafe_allow_html=True)
-    if st.session_state.page == "home":
-        render_home(config, materials)
-    elif st.session_state.page == "library":
-        render_library(config, materials)
-    elif st.session_state.page == "reader":
-        render_reader(materials, st.session_state.get("item", ""))
+    style()
+    config, materials, error = retrieve()
+    initial_route(materials)
+    sidebar(config, materials)
+    st.markdown('<div class="top-brand"><span>✳ STUDYSPACE</span><span>EDUCATION HUB</span></div>', unsafe_allow_html=True)
+    if error and st.session_state.get('page') == 'admin':
+        st.warning('Каталог GitHub временно недоступен. Показана локальная версия. '+error)
+    page = st.session_state.get('page', 'welcome')
+    lang = st.session_state.get('lang', '')
+    if page == 'admin':
+        admin(config, materials)
+    elif page == 'welcome' or lang not in LANG_LABELS:
+        welcome()
+    elif page == 'home':
+        home(config, materials, lang)
+    elif page == 'library':
+        library(config, materials, lang)
+    elif page == 'reader':
+        reader(materials, lang)
+    elif page == 'about':
+        about(lang)
     else:
-        render_about(config)
-    st.markdown('<div class="bottom-footer">StudySpace · Открытая библиотека учебных материалов · 2026</div>', unsafe_allow_html=True)
+        welcome()
+    st.markdown('<div class="footer">STUDYSPACE © 2026 · EDUCATION HUB</div>', unsafe_allow_html=True)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
