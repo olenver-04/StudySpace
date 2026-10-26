@@ -310,3 +310,152 @@ button[role="tab"],
 @keyframes floatY2{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(8px) rotate(-5deg)}}
 @keyframes spinSlow{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 @keyframes fadeUp{from{opacity:.0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+
+/* ===== 3.3 visual polish / contrast fixes ===== */
+:root{
+  --panel-strong:#ffffff;
+  --panel-tint:#fff5f6;
+  --shadow-strong:0 18px 40px rgba(118,33,52,.12);
+}
+
+/* Stronger container edges and clearer surfaces */
+[data-testid="stVerticalBlockBorderWrapper"]:has(.welcome-content),
+[data-testid="stVerticalBlockBorderWrapper"]:has(.home-hero),
+[data-testid="stVerticalBlockBorderWrapper"]:has(.language-card),
+[data-testid="stVerticalBlockBorderWrapper"]:has(.course-card-body),
+[data-testid="stVerticalBlockBorderWrapper"]:has(.material-card-body),
+[data-testid="stVerticalBlockBorderWrapper"]:has(.admin-stat),
+[data-testid="stVerticalBlockBorderWrapper"]:has(.filter-header),
+[data-testid="stVerticalBlockBorderWrapper"]:has(.login-intro){
+  background:linear-gradient(180deg,var(--panel-strong) 0%, var(--panel-tint) 100%)!important;
+  border:1px solid #e2c0c8!important;
+  box-shadow:0 10px 24px rgba(118,33,52,.07)!important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.course-card-body):hover,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.material-card-body):hover,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.language-card):hover,
+.admin-stat:hover{
+  border-color:#cd8a98!important;
+  box-shadow:var(--shadow-strong)!important;
+}
+
+/* Inputs and selects: remove dark fill completely */
+[data-baseweb="input"] > div,
+[data-baseweb="select"] > div,
+[data-testid="stTextInputRootElement"] > div,
+[data-testid="stNumberInputRootElement"] > div,
+[data-testid="stDateInputField"],
+[data-testid="stFileUploaderDropzone"],
+[data-testid="stTextArea"] textarea{
+  background:#fffdfd!important;
+  color:var(--text)!important;
+  border:1.5px solid #d9b4bd!important;
+  box-shadow:0 6px 16px rgba(145,58,79,.05)!important;
+}
+
+[data-baseweb="input"] > div:hover,
+[data-baseweb="select"] > div:hover,
+[data-testid="stTextInputRootElement"] > div:hover,
+[data-testid="stNumberInputRootElement"] > div:hover,
+[data-testid="stDateInputField"]:hover,
+[data-testid="stFileUploaderDropzone"]:hover,
+[data-testid="stTextArea"] textarea:hover{
+  border-color:#c97e8d!important;
+}
+
+[data-baseweb="input"] > div:focus-within,
+[data-baseweb="select"] > div:focus-within,
+[data-testid="stTextInputRootElement"] > div:focus-within,
+[data-testid="stNumberInputRootElement"] > div:focus-within,
+[data-testid="stDateInputField"]:focus-within,
+[data-testid="stTextArea"] textarea:focus{
+  border-color:#b44d63!important;
+  box-shadow:0 0 0 4px rgba(180,77,99,.10), 0 10px 20px rgba(145,58,79,.08)!important;
+}
+
+/* Ensure selected values/text/icons inside baseweb widgets stay light-theme */
+[data-baseweb="select"] *{color:var(--text)!important}
+[data-baseweb="select"] svg,
+[data-testid="stSelectbox"] svg,
+[data-testid="stMultiSelect"] svg{fill:var(--accent)!important;color:var(--accent)!important}
+[data-baseweb="select"] [role="combobox"],
+[data-baseweb="select"] input,
+[data-baseweb="select"] span,
+[data-testid="stSelectbox"] input,
+[data-testid="stMultiSelect"] input{
+  background:transparent!important;
+  color:var(--text)!important;
+}
+
+/* Dropdown menu surface */
+div[data-baseweb="popover"] > div,
+ul[role="listbox"]{
+  background:#fffdfd!important;
+  border:1px solid #e0bcc4!important;
+  box-shadow:0 18px 35px rgba(118,33,52,.12)!important;
+  color:var(--text)!important;
+}
+li[role="option"]{color:var(--text)!important;background:#fffdfd!important}
+li[role="option"][aria-selected="true"],
+li[role="option"]:hover{background:#fff1f4!important}
+
+/* Better text contrast */
+p, li, label, .stMarkdown, [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li{color:var(--text)}
+[data-testid="stCaptionContainer"], .course-card-foot, .material-card-body p, .heading-block p, .section-head p,
+.sidebar-note p, .welcome-copy p, .home-copy p, .login-intro p, .admin-section-heading p{color:#6f4f57!important}
+.material-course, .course-number, .lang-label, .hero-mini, .top-brand, .footer, .result-count>span:last-child, .admin-stat-foot{color:#9a6672!important}
+
+/* Sharper cards */
+.course-emoji,.file-icon,.lang-flag,.login-lock,.filter-icon,.admin-stat-head i{
+  border:1px solid #e6c4cb!important;
+}
+
+.stat-strip,
+.about-features>div,
+.sidebar-note,
+.side-language,
+.sidebar-intro,
+.login-intro,
+.empty-state,
+.language-choice-summary{
+  border-color:#e0bcc4!important;
+  box-shadow:0 10px 24px rgba(118,33,52,.06)!important;
+}
+
+/* Make sidebar and page divisions clearer */
+[data-testid="stSidebar"]{border-right:1px solid #e2c0c8!important;box-shadow:6px 0 24px rgba(118,33,52,.04)}
+.footer{border-top:1px solid #e3c6cc!important}
+.side-rule,.result-rule,.lang-divider{background:#e8cfd4!important}
+
+/* Buttons and tab contrast */
+button[role="tab"]{border-color:#d9b0ba!important;background:#fffafb!important;color:var(--text)!important}
+button[role="tab"][aria-selected="true"]{background:linear-gradient(135deg,var(--accent) 0%, var(--accent-2) 100%)!important;color:#fff!important}
+[data-testid="stVerticalBlockBorderWrapper"]:has(.course-card-body) [data-testid="stButton"] button,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.material-card-body) [data-testid="stButton"] button{
+  background:#fff8fa!important;
+  border-color:#d8b0b8!important;
+  color:var(--text)!important;
+}
+[data-testid="stVerticalBlockBorderWrapper"]:has(.course-card-body) [data-testid="stButton"] button:hover,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.material-card-body) [data-testid="stButton"] button:hover{
+  background:#fff1f4!important;
+  border-color:#c97e8d!important;
+}
+
+/* Data editor / code / alerts */
+[data-testid="stAlert"]{background:#fffafb!important;color:var(--text)!important}
+[data-testid="stCodeBlock"], pre, code{background:#fffdfd!important;color:var(--text)!important;border-color:#e2c0c8!important}
+.streamlit-expanderHeader{background:#fff8fa!important;border:1px solid #e2c0c8!important}
+
+/* Tables and metric-like regions if any */
+[data-testid="stMetric"]{background:#fffdfd;border:1px solid #e2c0c8;border-radius:18px;padding:14px;box-shadow:0 8px 20px rgba(118,33,52,.05)}
+
+/* Subtle page sheen reduced to improve readability */
+[data-testid="stAppViewContainer"]{
+  background:
+    radial-gradient(circle at top right, rgba(196,75,99,.08), transparent 24%),
+    radial-gradient(circle at top left, rgba(142,47,69,.05), transparent 18%),
+    linear-gradient(180deg,#fffefe 0%, #fff8f8 38%, #fff3f5 100%)!important;
+}
