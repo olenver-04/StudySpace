@@ -18,6 +18,15 @@
       "languages": [
         "kz"
       ]
+    },
+    {
+      "id": "programmnoe-obespechenie",
+      "title_ru": "Программное обеспечение",
+      "title_kz": "",
+      "icon": "📘",
+      "languages": [
+        "ru"
+      ]
     }
   ]
 }
