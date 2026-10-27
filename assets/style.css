@@ -296,3 +296,47 @@ button[role="tab"]:hover {border-color:#D88EA0!important}
 @media(max-width:820px){.stat-strip {grid-template-columns:repeat(2,minmax(0,1fr))}.stat-strip>div:nth-child(2){border-right:0}.stat-strip>div:nth-child(-n+2){border-bottom:1px solid var(--line)}.about-features{grid-template-columns:1fr}.top-status{display:none}}
 @media(max-width:600px){[data-testid="stMainBlockContainer"] {padding:1rem .7rem 2rem}.welcome-content,.home-hero{padding:12px}.welcome-copy h1,.home-copy h1{font-size:clamp(30px,8vw,44px)}.hero-benefits span{font-size:9px}.hero-overline{letter-spacing:1.3px;font-size:9px}.language-card,.course-card-body,.material-card-body{min-height:auto}.filter-header>span,.result-count>span:last-child{display:none}.top-brand{font-size:9px;letter-spacing:1px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+
+/* --- 3.5.1 readability polish: remove washed-out hero --- */
+[data-testid="stVerticalBlockBorderWrapper"]:has(.welcome-content),
+[data-testid="stVerticalBlockBorderWrapper"]:has(.home-hero){
+  background:#FFFFFF!important;
+  border:1px solid #DDE1E6!important;
+  box-shadow:var(--shadow-sm)!important;
+}
+.hero-overline{color:var(--brand)!important}
+.pulse-dot{background:var(--brand)!important;box-shadow:0 0 0 5px rgba(190,18,60,.10)!important}
+.overline-sep{color:#D77A91!important}
+.hero-mini{color:var(--muted-2)!important}
+.welcome-copy h1,.home-copy h1{
+  color:var(--text)!important;
+  text-shadow:none!important;
+}
+.welcome-copy h1 em,.home-copy h1 em{
+  color:var(--brand)!important;
+  -webkit-text-fill-color:var(--brand)!important;
+}
+.welcome-copy p,.home-copy p{color:var(--muted)!important}
+.hero-benefits span{
+  color:var(--brand-hover)!important;
+  background:#fff!important;
+  border:1px solid var(--brand-line)!important;
+}
+.welcome-visual,.home-art{opacity:1!important}
+.orbital-line,.home-ring{border-color:#EAC8D2!important}
+.floating-doc,.art-glass{box-shadow:0 12px 28px rgba(31,37,49,.08)!important}
+.visual-spark,.art-floating{color:#E4A3B4!important}
+.main-doc,.art-front{animation:none!important}
+.side-doc{animation:none!important}
+
+/* keep CTA buttons solid and readable in hero */
+[data-testid="stVerticalBlockBorderWrapper"]:has(.welcome-content) button[kind="primary"],
+[data-testid="stVerticalBlockBorderWrapper"]:has(.home-hero) button[kind="primary"]{
+  background:var(--brand)!important;
+  color:#fff!important;
+  border-color:var(--brand)!important;
+}
+
+/* slightly stronger section starts */
+.section-head h2,.heading-block h2{max-width:900px}
