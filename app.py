@@ -45,6 +45,9 @@ I18N = {
         'about_head':'О StudySpace', 'about_body':'Выбирай дисциплину, читай лекции, просматривай презентации и скачивай файлы. Для каждого языка материалы хранятся отдельно.',
         'no_preview':'Предпросмотр не удался. Попробуй скачать файл.', 'change_lang':'Сменить язык',
         'view':'Просмотр и скачивание', 'quick':'Удобно на компьютере и телефоне',
+        'manage':'УПРАВЛЕНИЕ', 'teacher_panel':'Панель преподавателя', 'filters':'Фильтры',
+        'note_title':'Твоя библиотека знаний', 'note_body':'Лекции, презентации и материалы для самостоятельной подготовки.',
+        'offline':'Материалы временно недоступны. Обнови страницу немного позже.',
     },
     'kz': {
         'home':'Бөлім', 'landing':'Басты бет', 'library':'Кітапхана', 'about':'Платформа туралы', 'choose':'Тілді таңдау',
@@ -62,6 +65,9 @@ I18N = {
         'about_head':'StudySpace туралы', 'about_body':'Пәнді таңда, дәрістерді оқы, презентацияларды қара және файлдарды жүктеп ал. Әр тілге арналған материалдар бөлек сақталады.',
         'no_preview':'Алдын ала қарау мүмкін емес. Файлды жүктеп көр.', 'change_lang':'Тілді өзгерту',
         'view':'Қарау және жүктеу', 'quick':'Компьютер мен телефонда ыңғайлы',
+        'manage':'БАСҚАРУ', 'teacher_panel':'Оқытушы панелі', 'filters':'Сүзгілер',
+        'note_title':'Сенің білім кітапханаң', 'note_body':'Дәрістер, презентациялар және өзіндік дайындыққа арналған материалдар.',
+        'offline':'Материалдар уақытша қолжетімсіз. Бетті сәл кейінірек жаңартып көр.',
     },
 }
 
@@ -186,10 +192,10 @@ def sidebar(config: dict, materials: list[dict]) -> None:
             st.markdown('<div class="sidebar-intro">Один портал. Два языка.<small>Бір платформа. Екі тіл.</small></div>', unsafe_allow_html=True)
             if st.button('🌐   Выбрать язык / Тілді таңдау', use_container_width=True, key='nav-choose-lang', type='primary'):
                 route('welcome', lang='')
-        st.markdown('<div class="side-rule"></div><div class="side-kicker">УПРАВЛЕНИЕ</div>', unsafe_allow_html=True)
-        if st.button('⚙   Панель преподавателя', use_container_width=True, key='nav-admin', type='primary' if active == 'admin' else 'secondary'):
+        st.markdown(f'<div class="side-rule"></div><div class="side-kicker">{esc(t["manage"])}</div>', unsafe_allow_html=True)
+        if st.button('⚙   '+t['teacher_panel'], use_container_width=True, key='nav-admin', type='primary' if active == 'admin' else 'secondary'):
             route('admin')
-        st.markdown('<div class="sidebar-note"><span class="note-spark">✦</span><b>Твоя библиотека знаний</b><p>Лекции, презентации и материалы для самостоятельной подготовки.</p><span class="note-footer">PDF  ·  PPTX  ·  DOCX</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sidebar-note"><span class="note-spark">✦</span><b>{esc(t["note_title"])}</b><p>{esc(t["note_body"])}</p><span class="note-footer">PDF  ·  PPTX  ·  DOCX</span></div>', unsafe_allow_html=True)
         st.markdown('<div class="sidebar-copy">© 2026 STUDYSPACE <span>V 3.2</span></div>', unsafe_allow_html=True)
 
 
@@ -304,7 +310,7 @@ def library(config: dict, materials: list[dict], lang: str) -> None:
     if current not in options:
         current = 'all'
     with st.container(border=True):
-        st.markdown('<div class="filter-header"><div><span class="filter-icon">⌕</span><b>Фильтры / Іздеу</b></div><span>FIND YOUR CONTENT</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="filter-header"><div><span class="filter-icon">⌕</span><b>{esc(t["filters"])}</b></div><span>FIND YOUR CONTENT</span></div>', unsafe_allow_html=True)
         a, b = st.columns([1.25, 1], gap='medium')
         with a:
             query = st.text_input(t['search'], placeholder=t['search_hint'], key=f'catalog_search_{lang}')
@@ -596,7 +602,7 @@ def admin(config: dict, materials: list[dict]) -> None:
                 if st.button('Убрать дисциплину', disabled=not confirm, key='delete_course_'+c['id']):
                     try:
                         live = github.read_catalog()
-                        live['courses'] = [x for x in live.get('courses',[]) if x['id'] != c['id']]
+                        live['courses'] = [x for x in live.get('courses',[]) if x.get('id') != c['id']]
                         github.write_file('catalog.json', (json.dumps(live,ensure_ascii=False,indent=2)+'\n').encode('utf-8'),
                                           'StudySpace: hide course '+c['id'], replace=True)
                         refresh_data()
@@ -618,6 +624,8 @@ def main() -> None:
     st.markdown(f'<div class="top-brand"><span><span class="top-mark">✳</span> STUDYSPACE <span class="top-slash">/</span> EDUCATION HUB</span><span class="top-status"><i></i>{esc(top_label)}</span></div>', unsafe_allow_html=True)
     if error and page == 'admin':
         st.warning('Каталог GitHub временно недоступен. Показана локальная версия. '+error)
+    elif error:
+        st.warning(I18N[lang]['offline'] if lang in I18N else I18N['ru']['offline']+' / '+I18N['kz']['offline'])
     if page == 'admin':
         admin(config, materials)
     elif page == 'welcome' or lang not in LANG_LABELS:
