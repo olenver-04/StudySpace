@@ -196,7 +196,7 @@ def sidebar(config: dict, materials: list[dict]) -> None:
         if st.button('⚙   '+t['teacher_panel'], use_container_width=True, key='nav-admin', type='primary' if active == 'admin' else 'secondary'):
             route('admin')
         st.markdown(f'<div class="sidebar-note"><span class="note-spark">✦</span><b>{esc(t["note_title"])}</b><p>{esc(t["note_body"])}</p><span class="note-footer">PDF  ·  PPTX  ·  DOCX</span></div>', unsafe_allow_html=True)
-        st.markdown('<div class="sidebar-copy">© 2026 STUDYSPACE <span>V 3.2</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-copy">© 2026 STUDYSPACE <span>V 4.0</span></div>', unsafe_allow_html=True)
 
 
 def welcome() -> None:
