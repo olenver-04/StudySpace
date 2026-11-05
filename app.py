@@ -142,6 +142,19 @@ def style() -> None:
     st.markdown('<style>'+(BASE/'assets/style.css').read_text(encoding='utf-8')+'</style>', unsafe_allow_html=True)
 
 
+def effects() -> None:
+    # Zero-height iframe; the script copies itself into the main page once.
+    with st.sidebar:
+        components.html('<script>'+(BASE/'assets/fx.js').read_text(encoding='utf-8')+'</script>', height=0)
+
+
+def ticker(words: list[str]) -> None:
+    words = words * -(-10 // len(words))  # whole copies only, so no word repeats back to back
+    track = ''.join(f'<span>{esc(w)}</span>' for w in words)
+    # The track is doubled so the -50% scroll loops without a seam.
+    st.markdown(f'<div class="ticker" aria-hidden="true"><div class="ticker-track">{track}{track}</div></div>', unsafe_allow_html=True)
+
+
 def header(title: str, subtitle: str = '', eyebrow: str = '') -> None:
     st.markdown(
         '<div class="heading-block">'
@@ -209,6 +222,7 @@ def welcome() -> None:
                     '<div class="floating-doc main-doc"><div class="doc-head"><span></span><span></span><span></span></div><div class="doc-emblem">✳</div><div class="doc-line wide"></div><div class="doc-line"></div><div class="doc-line short"></div></div>'
                     '<div class="floating-doc side-doc"><div class="side-doc-icon">▦</div><div class="side-doc-text"><i></i><i></i></div></div>'
                     '<div class="visual-spark spark-a">✦</div><div class="visual-spark spark-b">✧</div></div></div></div>', unsafe_allow_html=True)
+    ticker(['Лекции', 'Дәрістер', 'Презентации', 'Презентациялар', 'PDF', 'PPTX', 'DOCX', 'RU / KZ', 'Онлайн 24/7'])
     st.markdown('<div class="section-head"><div><span class="eyebrow">01 / START LEARNING</span><h2>Выбери язык обучения <span class="text-gradient">↗</span></h2><p>Әр тілге арналған оқу материалдары бөлек көрсетіледі.</p></div></div>', unsafe_allow_html=True)
     a, b = st.columns(2, gap='large')
     with a:
@@ -275,11 +289,12 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
         )
         if st.button(t['browse']+'   ↗', type='primary', key='hero_browse'):
             route('library')
+    ticker([display_course(c, lang) for c in visible_courses] + [t['lectures_one'], t['presentations_one'], 'PDF · PPTX · DOCX'])
     st.markdown(
-        f'<div class="stat-strip"><div><span class="stat-icon">◫</span><b>{len(visible_courses):02d}</b><span>{esc(t["courses"])}</span></div>'
-        f'<div><span class="stat-icon">▦</span><b>{len(visible):02d}</b><span>{esc(t["materials"])}</span></div>'
-        f'<div><span class="stat-icon">▤</span><b>{total_lectures:02d}</b><span>{esc(t["lectures"])}</span></div>'
-        f'<div><span class="stat-icon">▣</span><b>{total_presentations:02d}</b><span>{esc(t["presentations"])}</span></div></div>',
+        f'<div class="stat-strip"><div><span class="stat-icon">◫</span><b data-count="{len(visible_courses)}">{len(visible_courses):02d}</b><span>{esc(t["courses"])}</span></div>'
+        f'<div><span class="stat-icon">▦</span><b data-count="{len(visible)}">{len(visible):02d}</b><span>{esc(t["materials"])}</span></div>'
+        f'<div><span class="stat-icon">▤</span><b data-count="{total_lectures}">{total_lectures:02d}</b><span>{esc(t["lectures"])}</span></div>'
+        f'<div><span class="stat-icon">▣</span><b data-count="{total_presentations}">{total_presentations:02d}</b><span>{esc(t["presentations"])}</span></div></div>',
         unsafe_allow_html=True,
     )
     header(t['courses'], t['course_sub'], '02 / DISCOVER')
@@ -441,7 +456,7 @@ def admin(config: dict, materials: list[dict]) -> None:
     stats = st.columns(3, gap='medium')
     for col, label, number, symbol in zip(stats, ['Дисциплины', 'Лекции', 'Презентации'], [len(config['courses']), sum(m['kind'] == 'lectures' for m in materials), sum(m['kind'] == 'presentations' for m in materials)], ['▦','▤','▣']):
         with col:
-            st.markdown(f'<div class="admin-stat"><div class="admin-stat-head"><span>{esc(label)}</span><i>{symbol}</i></div><strong>{number:02d}</strong><div class="admin-stat-foot">STUDYSPACE · LIVE</div></div>',unsafe_allow_html=True)
+            st.markdown(f'<div class="admin-stat"><div class="admin-stat-head"><span>{esc(label)}</span><i>{symbol}</i></div><strong data-count="{number}">{number:02d}</strong><div class="admin-stat-foot">STUDYSPACE · LIVE</div></div>',unsafe_allow_html=True)
     st.markdown('<div class="admin-section-heading"><span class="eyebrow">TOOLS / УПРАВЛЕНИЕ</span><h3>Контент и дисциплины</h3><p>Все изменения сохраняются непосредственно в твоём репозитории GitHub.</p></div>', unsafe_allow_html=True)
     create_tab, upload_tab, manage_tab = st.tabs(['✳   Создать дисциплину', '↥   Загрузить материалы', '▦   Мои дисциплины'])
     with create_tab:
@@ -615,6 +630,7 @@ def admin(config: dict, materials: list[dict]) -> None:
 
 def main() -> None:
     style()
+    effects()
     config, materials, error = retrieve()
     initial_route(materials)
     sidebar(config, materials)

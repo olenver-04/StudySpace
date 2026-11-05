@@ -62,9 +62,19 @@ html, body, [class*="css"], .stApp {font-family: 'Manrope', 'Segoe UI', Arial, s
           mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
 }
 [data-testid="stMain"] {position: relative; z-index: 1}
+/* Film grain for a less "flat digital" look. */
+[data-testid="stApp"]::after {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 999990; opacity: .05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* Effects layer injected by fx.js. */
+#ss-progress {position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 1000001; pointer-events: none; transform-origin: 0 50%; transform: scaleX(0); background: var(--grad); box-shadow: 0 0 14px rgba(244,63,94,.9)}
+#ss-glow {position: fixed; left: -300px; top: -300px; width: 600px; height: 600px; border-radius: 50%; z-index: 999991; pointer-events: none; mix-blend-mode: screen; will-change: transform; background: radial-gradient(circle, rgba(244,63,94,.11), rgba(167,139,250,.05) 40%, transparent 70%)}
+@property --spin {syntax: '<angle>'; initial-value: 0deg; inherits: false}
 [data-testid="stHeader"] {background: transparent !important}
 [data-testid="stMainBlockContainer"] {max-width: 1380px; padding: 1.4rem 1.6rem 3rem}
 #MainMenu, footer {visibility: hidden}
+:is(.course-card-body, .material-card-body, .language-card, .welcome-content, .home-hero, .heading-block, .section-head, .empty-state, .admin-section-heading, .login-intro) [data-testid="stHeaderActionElements"] {display: none}
 :focus-visible {outline: 2px solid var(--rose-2) !important; outline-offset: 3px}
 button, input, select, textarea {font-family: inherit}
 * {scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent}
@@ -122,6 +132,14 @@ button[kind="secondary"], button[kind="secondaryFormSubmit"] {
 button[kind="secondary"]:hover, button[kind="secondaryFormSubmit"]:hover {
   background: rgba(244,63,94,.1) !important; border-color: rgba(251,113,133,.5) !important; color: #fff !important; transform: translateY(-2px);
 }
+/* Light sweep across primary buttons. */
+button[kind="primary"], button[kind="primaryFormSubmit"], .stDownloadButton button {position: relative; overflow: hidden}
+button[kind="primary"]::after, button[kind="primaryFormSubmit"]::after, .stDownloadButton button::after {
+  content: ''; position: absolute; top: 0; left: -70%; width: 45%; height: 100%; pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.38), transparent); transform: skewX(-20deg);
+  transition: left .75s cubic-bezier(.2,.7,.2,1);
+}
+button[kind="primary"]:hover::after, button[kind="primaryFormSubmit"]:hover::after, .stDownloadButton button:hover::after {left: 130%}
 button:active {transform: translateY(0) scale(.985) !important}
 button:disabled {opacity: .45 !important; cursor: not-allowed !important; transform: none !important; filter: none !important}
 [data-testid="stSidebar"] [data-testid="stButton"] button {width: 100%; justify-content: flex-start; text-align: left; padding: 10px 14px; min-height: 44px}
@@ -200,36 +218,54 @@ button[role="tab"] p {color: inherit !important}
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .language-card),
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .course-card-body),
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .material-card-body) {
-  padding: 20px !important; animation: appear .5s cubic-bezier(.2,.7,.2,1) both;
+  /* backwards, not both: a held final keyframe would override hover/tilt transforms. */
+  padding: 20px !important; animation: appear .6s cubic-bezier(.2,.7,.2,1) backwards;
   transition: transform .35s cubic-bezier(.2,.7,.2,1), border-color .35s ease, box-shadow .35s ease !important;
+  transform-style: preserve-3d; will-change: transform;
 }
+[data-testid="stVerticalBlock"].ss-tilt {transition: transform .12s ease-out, border-color .35s ease, box-shadow .35s ease !important}
+[data-testid="stColumn"]:nth-child(2) [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] :is(.language-card, .course-card-body, .material-card-body)) {animation-delay: .08s}
+[data-testid="stColumn"]:nth-child(3) [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] :is(.language-card, .course-card-body, .material-card-body)) {animation-delay: .16s}
+/* Light running around the card border on hover. */
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] :is(.language-card, .course-card-body, .material-card-body))::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 3;
+  background: conic-gradient(from var(--spin), transparent 0 55%, rgba(251,113,133,.95) 72%, rgba(167,139,250,.95) 84%, transparent 96%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+          mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0; transition: opacity .4s ease; animation: spinBorder 3.5s linear infinite;
+}
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] :is(.language-card, .course-card-body, .material-card-body)):hover::after {opacity: 1}
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .language-card):hover,
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .course-card-body):hover,
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .material-card-body):hover {
   transform: translateY(-6px); border-color: rgba(251,113,133,.38) !important;
   box-shadow: 0 30px 70px -30px rgba(244,63,94,.55), inset 0 1px 0 rgba(255,255,255,.08) !important;
 }
-/* Spotlight glow in the top corner of every card. */
+/* Spotlight: sits in the top corner, follows the cursor when fx.js sets --mx/--my. */
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .language-card)::before,
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .course-card-body)::before,
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .material-card-body)::before {
-  content: ''; position: absolute; width: 260px; height: 260px; right: -120px; top: -140px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(244,63,94,.28), transparent 68%); opacity: .55; pointer-events: none;
-  transition: opacity .35s ease, transform .5s ease;
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(380px circle at var(--mx, 92%) var(--my, -8%), var(--spot, rgba(244,63,94,.26)), transparent 62%);
+  opacity: .6; transition: opacity .35s ease;
 }
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .language-card):hover::before,
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .course-card-body):hover::before,
-[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .material-card-body):hover::before {opacity: 1; transform: scale(1.25)}
-[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .material-card-body)::before {background: radial-gradient(circle, rgba(167,139,250,.22), transparent 68%)}
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .material-card-body):hover::before {opacity: 1}
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .material-card-body) {--spot: rgba(167,139,250,.24)}
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .lang-kz) {--spot: rgba(34,211,238,.2)}
 
 /* ---------- Hero (welcome + home) ---------- */
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .welcome-content),
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .home-hero) {
   position: relative; overflow: hidden; isolation: isolate;
-  background: linear-gradient(160deg, rgba(23,17,28,.92), rgba(12,11,18,.92)) !important;
-  border: 1px solid rgba(255,255,255,.1) !important; border-radius: 30px !important;
-  box-shadow: 0 40px 100px -40px rgba(225,29,72,.45), inset 0 1px 0 rgba(255,255,255,.08) !important;
-  padding: 18px 22px 26px !important;
+  /* Opaque fill on padding-box, rotating light on border-box = animated gradient border. */
+  background:
+    linear-gradient(160deg, #17111C, #0C0B12) padding-box,
+    conic-gradient(from var(--spin), rgba(255,255,255,.1) 0 50%, #FB7185 66%, #A78BFA 78%, rgba(255,255,255,.1) 92%) border-box !important;
+  border: 1px solid transparent !important; border-radius: 30px !important;
+  box-shadow: 0 40px 100px -40px rgba(225,29,72,.5), inset 0 1px 0 rgba(255,255,255,.08) !important;
+  padding: 18px 22px 26px !important; animation: spinBorder 9s linear infinite;
 }
 /* Slow drifting aurora behind the hero copy. */
 [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .welcome-content)::before,
@@ -270,6 +306,28 @@ button[role="tab"] p {color: inherit !important}
   color: var(--rose-2); text-shadow: 0 0 40px rgba(244,63,94,.45);
 }
 .welcome-copy p, .home-copy p {font-size: 15px; line-height: 1.8; color: #C9C3CE; max-width: 620px; margin: 0 0 24px}
+/* Entrance: headline, accent word, underline, then copy. */
+.welcome-copy h1, .home-copy h1 {animation: heroIn 1s cubic-bezier(.2,.7,.2,1) backwards}
+.welcome-copy h1 em, .home-copy h1 em {display: inline-block; position: relative; animation: heroIn 1s .25s cubic-bezier(.2,.7,.2,1) backwards}
+.welcome-copy h1 em::after, .home-copy h1 em::after {
+  content: ''; position: absolute; left: 3%; right: 3%; bottom: .04em; height: .07em; border-radius: 9px;
+  background: var(--grad); box-shadow: 0 0 20px rgba(244,63,94,.85); transform-origin: left;
+  animation: drawLine 1s .95s cubic-bezier(.7,0,.2,1) backwards;
+}
+.welcome-copy p, .home-copy p {animation: heroIn .9s .4s cubic-bezier(.2,.7,.2,1) backwards}
+.hero-benefits {animation: heroIn .9s .55s cubic-bezier(.2,.7,.2,1) backwards}
+
+/* ---------- Ticker ---------- */
+.ticker {
+  position: relative; overflow: hidden; margin: 22px 0 0; padding: 15px 0; border-block: 1px solid var(--line);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+}
+.ticker-track {display: flex; width: max-content; animation: marquee 40s linear infinite}
+.ticker:hover .ticker-track {animation-play-state: paused}
+.ticker span {display: inline-flex; align-items: center; gap: 16px; padding: 0 24px 0 0; font-family: var(--display); font-size: 13px; font-weight: 500; color: var(--muted); white-space: nowrap; transition: color .2s ease}
+.ticker span::before {content: '✦'; color: var(--rose-2); font-size: 11px; text-shadow: 0 0 10px var(--rose)}
+.ticker span:hover {color: var(--text)}
 .hero-benefits {display: flex; flex-wrap: wrap; gap: 9px; margin: 8px 0 18px}
 .hero-benefits span {font-size: 10.5px; color: var(--text); background: var(--glass-2); padding: 9px 14px; border: 1px solid var(--line-2); border-radius: 999px; font-weight: 700; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px)}
 
@@ -421,7 +479,7 @@ button[role="tab"] p {color: inherit !important}
 .login-lock {display: grid; place-items: center; width: 60px; height: 60px; flex: none; border-radius: 18px; background: var(--grad); color: #fff; font-size: 30px; box-shadow: var(--glow)}
 .login-intro h3 {color: var(--text); font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0 0 6px}
 .login-intro p {color: var(--muted); font-size: 12.5px; line-height: 1.7; margin: 0}
-.admin-stat {position: relative; overflow: hidden; background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.015)); border: 1px solid var(--line); padding: 22px 24px; border-radius: var(--radius); min-height: 150px; transition: transform .3s ease, border-color .3s ease; box-shadow: var(--shadow); animation: appear .5s ease both}
+.admin-stat {position: relative; overflow: hidden; background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.015)); border: 1px solid var(--line); padding: 22px 24px; border-radius: var(--radius); min-height: 150px; transition: transform .3s ease, border-color .3s ease; box-shadow: var(--shadow); animation: appear .5s ease backwards}
 .admin-stat:hover {transform: translateY(-4px); border-color: rgba(251,113,133,.35)}
 .admin-stat-head {display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--muted); font-weight: 700}
 .admin-stat-head i {width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; background: rgba(244,63,94,.12); border: 1px solid rgba(251,113,133,.25); font-style: normal; color: var(--rose-2)}
@@ -447,6 +505,10 @@ button[role="tab"] p {color: inherit !important}
 @keyframes twinkle {0%, 100% {opacity: 1; transform: scale(1)} 50% {opacity: .35; transform: scale(.8)}}
 @keyframes aurora {0% {transform: translate(0, 0) rotate(0deg)} 50% {transform: translate(-6%, 4%) rotate(8deg)} 100% {transform: translate(4%, -3%) rotate(-6deg)}}
 @keyframes floatMain {0%, 100% {transform: translateY(0) rotate(7deg)} 50% {transform: translateY(-12px) rotate(9deg)}}
+@keyframes spinBorder {to {--spin: 360deg}}
+@keyframes heroIn {from {opacity: 0; transform: translateY(26px); filter: blur(12px)} to {opacity: 1; transform: none; filter: none}}
+@keyframes drawLine {from {transform: scaleX(0)} to {transform: scaleX(1)}}
+@keyframes marquee {to {transform: translateX(-50%)}}
 @keyframes floatSide {0%, 100% {transform: translateY(0) rotate(-8deg)} 50% {transform: translateY(10px) rotate(-5deg)}}
 
 /* ---------- Responsive ---------- */
