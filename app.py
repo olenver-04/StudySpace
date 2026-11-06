@@ -6,6 +6,7 @@ server-side password authentication. GitHub credentials stay in st.secrets.
 from __future__ import annotations
 
 import base64
+import hashlib
 import html
 import hmac
 import json
@@ -25,7 +26,7 @@ from portal_logic import (
     safe_filename, slugify, upload_path, valid_slug,
 )
 
-st.set_page_config(page_title='StudySpace • Education Hub', page_icon='✳️', layout='wide', initial_sidebar_state='auto')
+st.set_page_config(page_title='StudySpace • Education Hub', page_icon='✳️', layout='wide', initial_sidebar_state='collapsed')
 BASE = Path(__file__).resolve().parent
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 LANG_LABELS = {'ru': '🇷🇺 Русский', 'kz': '🇰🇿 Қазақша'}
@@ -57,6 +58,7 @@ I18N = {
         'note_title':'Твоя библиотека знаний', 'note_body':'Лекции, презентации и материалы для самостоятельной подготовки.',
         'offline':'Материалы временно недоступны. Обнови страницу немного позже.',
         'office_hint':'Если файл не отобразился, скачай его кнопкой ниже.',
+        'nav_home':'Главная', 'nav_admin':'Преподавателю',
         'recent_title':'Недавно открытые', 'recent_sub':'Материалы, которые ты открывал на этом устройстве.',
         'new':'НОВОЕ', 'new_title':'Новые материалы', 'new_sub':'Добавлено за последние 7 дней.',
         'back_home':'← Ко всем предметам', 'back_course':'← К предмету',
@@ -84,6 +86,7 @@ I18N = {
         'note_title':'Сенің білім кітапханаң', 'note_body':'Дәрістер, презентациялар және өзіндік дайындыққа арналған материалдар.',
         'offline':'Материалдар уақытша қолжетімсіз. Бетті сәл кейінірек жаңартып көр.',
         'office_hint':'Файл көрсетілмесе, оны төмендегі батырмамен жүктеп ал.',
+        'nav_home':'Басты бет', 'nav_admin':'Оқытушыға',
         'recent_title':'Соңғы ашылғандар', 'recent_sub':'Осы құрылғыда ашқан материалдарың.',
         'new':'ЖАҢА', 'new_title':'Жаңа материалдар', 'new_sub':'Соңғы 7 күнде қосылғандар.',
         'back_home':'← Барлық пәндерге', 'back_course':'← Пәнге оралу',
@@ -212,13 +215,6 @@ def effects() -> None:
     st.iframe('<script>'+(BASE/'assets/fx.js').read_text(encoding='utf-8')+'</script>', height=1)
 
 
-def ticker(words: list[str]) -> None:
-    words = words * -(-10 // len(words))  # whole copies only, so no word repeats back to back
-    track = ''.join(f'<span>{esc(w)}</span>' for w in words)
-    # The track is doubled so the -50% scroll loops without a seam.
-    st.markdown(f'<div class="ticker" aria-hidden="true"><div class="ticker-track">{track}{track}</div></div>', unsafe_allow_html=True)
-
-
 def header(title: str, subtitle: str = '', eyebrow: str = '') -> None:
     st.markdown(
         '<div class="heading-block">'
@@ -230,6 +226,11 @@ def header(title: str, subtitle: str = '', eyebrow: str = '') -> None:
 
 def badge(text: str, variant: str = '') -> str:
     return f'<span class="badge-text {esc(variant)}">{esc(text)}</span>'
+
+
+def key_of(*parts: str) -> str:
+    # Widget/container keys become CSS classes, so file paths are hashed into a safe token.
+    return hashlib.md5('|'.join(parts).encode('utf-8')).hexdigest()[:12]
 
 
 def initial_route(materials: list[dict]) -> None:
@@ -251,96 +252,82 @@ def initial_route(materials: list[dict]) -> None:
         st.session_state.update(page='welcome', lang='', course='', material='')
 
 
-def sidebar(config: dict, materials: list[dict]) -> None:
-    lang = st.session_state.get('lang')
+def topnav() -> None:
+    """Top bar: brand, sections, teacher link, language switch. Replaces the old sidebar."""
+    lang = st.session_state.get('lang', '')
     t = I18N.get(lang, I18N['ru'])
-    active = st.session_state.get('page', 'welcome')
-    with st.sidebar:
-        st.markdown('<div class="brand"><div class="brand-icon">✳</div><div><b>StudySpace</b><small>LEARNING PLATFORM</small></div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-kicker">НАВИГАЦИЯ / NAVIGATION</div>', unsafe_allow_html=True)
-        if lang in LANG_LABELS:
-            st.markdown(f'<div class="side-language"><span class="side-lang-dot"></span><b>{esc(LANG_LABELS[lang])}</b><span class="lang-chevron">⌄</span></div>', unsafe_allow_html=True)
-            nav = [('welcome', '✦', t['landing']), ('home', '⌂', t['home']), ('library', '▦', t['library']), ('about', '◎', t['about'])]
-            for page, icon, label in nav:
-                is_active = active == page
-                if st.button(f'{icon}   {label}', key=f'nav-{page}', use_container_width=True, type='primary' if is_active else 'secondary'):
-                    if page == 'welcome':
-                        route('welcome', lang='')
-                    else:
-                        route(page)
-            if st.button('⇄   '+t['change_lang'], use_container_width=True, key='nav-change-lang'):
+    page = st.session_state.get('page', 'welcome')
+    current = {'course': 'home', 'reader': 'library'}.get(page, page)
+    links = [('home', t['nav_home']), ('library', t['library']), ('about', t['about'])] if lang in LANG_LABELS else []
+    links.append(('admin', t['nav_admin']))
+    other = {'ru': 'kz', 'kz': 'ru'}.get(lang)
+    with st.container(key='topnav'):
+        cols = st.columns([3.2] + [1] * len(links) + [0.7], vertical_alignment='center', gap='small')
+        if cols[0].button('StudySpace', type='tertiary', key='nav-brand'):
+            route('welcome', lang='')
+        for col, (target, label) in zip(cols[1:], links):
+            if col.button(label, type='primary' if current == target else 'tertiary', key='nav-'+target):
+                route(target)
+        if cols[-1].button(other.upper() if other else 'RU/KZ', key='nav-lang', help=t['change_lang']):
+            if other:
+                route('home', lang=other)
+            else:
                 route('welcome', lang='')
-        else:
-            st.markdown('<div class="sidebar-intro">Один портал. Два языка.<small>Бір платформа. Екі тіл.</small></div>', unsafe_allow_html=True)
-            if st.button('🌐   Выбрать язык / Тілді таңдау', use_container_width=True, key='nav-choose-lang', type='primary'):
-                route('welcome', lang='')
-        st.markdown(f'<div class="side-rule"></div><div class="side-kicker">{esc(t["manage"])}</div>', unsafe_allow_html=True)
-        if st.button('⚙   '+t['teacher_panel'], use_container_width=True, key='nav-admin', type='primary' if active == 'admin' else 'secondary'):
-            route('admin')
-        st.markdown(f'<div class="sidebar-note"><span class="note-spark">✦</span><b>{esc(t["note_title"])}</b><p>{esc(t["note_body"])}</p><span class="note-footer">PDF  ·  PPTX  ·  DOCX</span></div>', unsafe_allow_html=True)
-        st.markdown('<div class="sidebar-copy">© 2026 STUDYSPACE <span>V 4.2</span></div>', unsafe_allow_html=True)
+
+
+def row(key: str, number: int, title: str, *, kicker: str = '', sub: str = '', meta: str = '',
+        new: str = '', big: bool = False, button: str = '', button_key: str = '') -> bool:
+    """One line of a modernist index list; returns True when its button is pressed."""
+    with st.container(key='row_'+key):
+        left, right = st.columns([5, 1.25], vertical_alignment='center')
+        left.markdown(
+            f'<div class="row"><span class="row-n">{number:02d}</span><div class="row-body">'
+            + (f'<span class="row-kicker">{esc(kicker)}</span>' if kicker else '')
+            + f'<b class="row-title{" big" if big else ""}">{esc(title)}</b>'
+            + (f'<span class="row-sub">{esc(sub)}</span>' if sub else '')
+            + '</div><span class="row-meta">'
+            + (f'<span class="tag-new">{esc(new)}</span>' if new else '') + f'{esc(meta)}</span></div>',
+            unsafe_allow_html=True,
+        )
+        return right.button(button, key=button_key, type='tertiary', use_container_width=True)
+
+
+def end_list() -> None:
+    st.markdown('<div class="list-end"></div>', unsafe_allow_html=True)
+
+
+def material_row(item: dict, lang: str, prefix: str, number: int) -> None:
+    t = I18N[lang]
+    kind = t['lectures_one'] if item['kind'] == 'lectures' else t['presentations_one']
+    if row(f'{prefix}_{key_of(item["id"])}', number, item['title'],
+           kicker=f'{display_course(item["course"], lang)} — {kind}',
+           meta=f'{item["extension"].lstrip(".").upper()} · {human_size(item["size"])}',
+           new=t['new'] if item.get('new') else '', button=t['open_item']+' →', button_key=f'item_{prefix}_{item["id"]}'):
+        route('reader', course=item['course_id'], material=item['id'])
+
+
+def material_list(items: list[dict], lang: str, prefix: str) -> None:
+    for n, item in enumerate(items, 1):
+        material_row(item, lang, prefix, n)
+    end_list()
 
 
 def welcome() -> None:
-    with st.container(border=True):
-        st.markdown('<div class="welcome-content"><div class="hero-overline"><span class="pulse-dot"></span> WELCOME TO STUDYSPACE <span class="overline-sep">/</span> EDUCATION HUB</div>'
-                    '<div class="welcome-layout"><div class="welcome-copy"><div class="hero-mini">ТВОЁ ПРОСТРАНСТВО ДЛЯ УЧЁБЫ</div><h1>Учиться проще,<br><em>когда всё рядом.</em></h1>'
-                    '<p>Лекции, презентации и полезные материалы собраны в одном удобном месте. Выбери язык — и открой нужный раздел обучения.</p>'
-                    '<div class="hero-benefits"><span>✦ Без регистрации</span><span>◈ С любого устройства</span><span>↗ Всегда под рукой</span></div></div>'
-                    '<div class="welcome-visual" aria-hidden="true"><div class="orbital-line orbital-one"></div><div class="orbital-line orbital-two"></div>'
-                    '<div class="floating-doc main-doc"><div class="doc-head"><span></span><span></span><span></span></div><div class="doc-emblem">✳</div><div class="doc-line wide"></div><div class="doc-line"></div><div class="doc-line short"></div></div>'
-                    '<div class="floating-doc side-doc"><div class="side-doc-icon">▦</div><div class="side-doc-text"><i></i><i></i></div></div>'
-                    '<div class="visual-spark spark-a">✦</div><div class="visual-spark spark-b">✧</div></div></div></div>', unsafe_allow_html=True)
-    ticker(['Лекции', 'Дәрістер', 'Презентации', 'Презентациялар', 'PDF', 'PPTX', 'DOCX', 'RU / KZ', 'Онлайн 24/7'])
-    st.markdown('<div class="section-head"><div><span class="eyebrow">01 / START LEARNING</span><h2>Выбери язык обучения <span class="text-gradient">↗</span></h2><p>Әр тілге арналған оқу материалдары бөлек көрсетіледі.</p></div></div>', unsafe_allow_html=True)
-    a, b = st.columns(2, gap='large')
-    with a:
-        with st.container(border=True):
-            st.markdown('<div class="language-card lang-ru"><div class="lang-card-top"><span class="lang-flag">RU</span><span class="lang-label">РУССКИЙ РАЗДЕЛ</span><span class="lang-arrow">↗</span></div><h3>Русский язык</h3><p>Лекции, презентации и дополнительные материалы на русском языке.</p><div class="lang-divider"></div><span class="lang-bottom">НАЧАТЬ ОБУЧЕНИЕ <span>→</span></span></div>', unsafe_allow_html=True)
-            if st.button('Открыть библиотеку  ↗', type='primary', use_container_width=True, key='choose_ru'):
-                route('home', lang='ru')
-    with b:
-        with st.container(border=True):
-            st.markdown('<div class="language-card lang-kz"><div class="lang-card-top"><span class="lang-flag">KZ</span><span class="lang-label">ҚАЗАҚША БӨЛІМ</span><span class="lang-arrow">↗</span></div><h3>Қазақ тілі</h3><p>Қазақ тіліндегі дәрістер, презентациялар және оқу материалдары.</p><div class="lang-divider"></div><span class="lang-bottom">ОҚУДЫ БАСТАУ <span>→</span></span></div>', unsafe_allow_html=True)
-            if st.button('Кітапхананы ашу  ↗', type='primary', use_container_width=True, key='choose_kz'):
-                route('home', lang='kz')
-    st.markdown('<div class="trustline"><span class="trust-icon">✳</span> Твой цифровой кампус. Просто открой и учись. <span>•</span> Жеке тіркелу қажет емес.</div>', unsafe_allow_html=True)
-
-
-def course_card(course: dict, lang: str, items: list[dict], index: int = 0) -> None:
-    t = I18N[lang]
-    own = [m for m in items if m['lang'] == lang and m['course_id'] == course['id']]
-    fresh = sum(bool(m.get('new')) for m in own)
-    with st.container(border=True):
-        st.markdown(
-            f'<div class="course-card-body card-tone-{index % 6}"><div class="course-head">'
-            f'<div class="course-emoji">{esc(course.get("icon", "📘"))}</div>'
-            + (badge(f'+{fresh} {t["new"]}', 'new') if fresh else f'<span class="course-number">{index+1:02d} / COURSE</span>') + '</div>'
-            f'<h3>{esc(display_course(course, lang))}</h3>'
-            f'<div class="course-card-foot"><span><span class="course-dot"></span>{len(own)} {esc(t["materials"])}</span><span class="course-go">↗</span></div></div>',
-            unsafe_allow_html=True,
-        )
-        if st.button(t['open']+'   ↗', use_container_width=True, key=f'course_{lang}_{course["id"]}'):
-            route('course', course=course['id'])
-
-
-def card(item: dict, lang: str, prefix: str = '') -> None:
-    t = I18N[lang]
-    kindtext = t['lectures_one'] if item['kind'] == 'lectures' else t['presentations_one']
-    file_icon = '▣' if item['kind'] == 'presentations' else '▤'
-    with st.container(border=True):
-        st.markdown(
-            '<div class="material-card-body">'
-            + f'<div class="material-top"><span class="file-icon">{file_icon}</span><div class="material-meta">'
-            + (badge(t['new'], 'new') if item.get('new') else '')
-            + badge(kindtext, 'lecture' if item['kind'] == 'lectures' else 'presentation')
-            + badge(item['extension'].lstrip('.').upper())+'</div></div>'
-            + f'<span class="material-course">{esc(display_course(item["course"], lang))}</span>'
-            + f'<h3>{esc(item["title"])}</h3><p>{esc(human_size(item["size"]))} <span class="material-bullet">·</span> {esc(t["view"])}</p></div>',
-            unsafe_allow_html=True,
-        )
-        if st.button(t['open_item']+'   ↗', use_container_width=True, key=f'item_{prefix}_{item["id"]}'):
-            route('reader', course=item['course_id'], material=item['id'])
+    st.markdown(
+        '<section class="hero"><div class="hero-meta"><span>StudySpace</span><span>Education hub</span>'
+        '<span>RU / KZ</span><span>2026</span></div>'
+        '<h1>Учиться проще, когда всё рядом<span class="dot">.</span></h1>'
+        '<p class="hero-lead">Лекции, презентации и материалы в одном месте. Выбери язык обучения.'
+        '<br><span>Дәрістер мен презентациялар бір жерде. Оқу тілін таңда.</span></p></section>',
+        unsafe_allow_html=True,
+    )
+    header('Язык обучения / Оқу тілі', '', '01')
+    sections = [('ru', 'Русский язык', 'Лекции и презентации на русском языке', 'Открыть'),
+                ('kz', 'Қазақ тілі', 'Қазақ тіліндегі дәрістер мен презентациялар', 'Ашу')]
+    for n, (code, title, sub, label) in enumerate(sections, 1):
+        if row('lang_'+code, n, title, sub=sub, meta=code.upper(), big=True, button=label+' →', button_key='choose_'+code):
+            route('home', lang=code)
+    end_list()
 
 
 def recent_ids() -> list[str]:
@@ -357,60 +344,52 @@ def recent_ids() -> list[str]:
 def home(config: dict, materials: list[dict], lang: str) -> None:
     t = I18N[lang]
     visible_courses = [c for c in config['courses'] if lang in course_languages(c)]
-    visible = [m for m in materials if m['lang'] == lang]
-    total_lectures = sum(i['kind'] == 'lectures' for i in visible)
-    total_presentations = len(visible)-total_lectures
-    headline = ('Знания ближе, чем <em>кажется.</em>' if lang == 'ru' else 'Білімнің бәрі <em>осында.</em>')
-    with st.container(border=True):
-        st.markdown(
-            f'<div class="home-hero"><div class="hero-overline"><span class="pulse-dot"></span> {esc(t["hero_tag"])}</div>'
-            f'<div class="home-content"><div class="home-copy"><span class="hero-mini">STUDYSPACE <span class="mini-line"></span> 2026</span>'
-            f'<h1>{headline}</h1><p>{esc(t["hero_sub"])}</p>'
-            f'<div class="hero-benefits"><span>◈ PDF / PPTX / DOCX</span><span>✦ RU / KZ</span><span>↗ ONLINE</span></div></div>'
-            '<div class="home-art" aria-hidden="true"><div class="home-ring"></div><div class="art-glass art-back">▤</div><div class="art-glass art-front"><span class="art-star">✳</span><div class="art-bar"></div><div class="art-bar art-short"></div><span class="art-stamp">EDUCATION</span></div><span class="art-floating">✦</span></div></div></div>',
-            unsafe_allow_html=True,
-        )
-        if st.button(t['browse']+'   ↗', type='primary', key='hero_browse'):
-            route('library')
-    ticker([display_course(c, lang) for c in visible_courses] + [t['lectures_one'], t['presentations_one'], 'PDF · PPTX · DOCX'])
+    visible_ids = {c['id'] for c in visible_courses}
+    visible = [m for m in materials if m['lang'] == lang and m['course_id'] in visible_ids]
+    lectures = sum(i['kind'] == 'lectures' for i in visible)
+    headline = 'Знания ближе, чем кажется' if lang == 'ru' else 'Білімнің бәрі осында'
     st.markdown(
-        f'<div class="stat-strip"><div><span class="stat-icon">◫</span><b data-count="{len(visible_courses)}">{len(visible_courses):02d}</b><span>{esc(t["courses"])}</span></div>'
-        f'<div><span class="stat-icon">▦</span><b data-count="{len(visible)}">{len(visible):02d}</b><span>{esc(t["materials"])}</span></div>'
-        f'<div><span class="stat-icon">▤</span><b data-count="{total_lectures}">{total_lectures:02d}</b><span>{esc(t["lectures"])}</span></div>'
-        f'<div><span class="stat-icon">▣</span><b data-count="{total_presentations}">{total_presentations:02d}</b><span>{esc(t["presentations"])}</span></div></div>',
+        f'<section class="hero"><div class="hero-meta"><span>{esc(t["hero_tag"])}</span><span>{esc(LANG_LABELS[lang])}</span>'
+        f'<span>PDF · PPTX · DOCX</span><span>2026</span></div>'
+        f'<h1>{esc(headline)}<span class="dot">.</span></h1><p class="hero-lead">{esc(t["hero_sub"])}</p></section>',
         unsafe_allow_html=True,
     )
-    visible_ids = {c['id'] for c in visible_courses}
-    by_id = {m['id']: m for m in visible if m['course_id'] in visible_ids}
+    if st.button(t['browse']+'  →', type='primary', key='hero_browse'):
+        route('library')
+    stats = [(len(visible_courses), t['courses']), (len(visible), t['materials']),
+             (lectures, t['lectures']), (len(visible) - lectures, t['presentations'])]
+    st.markdown('<div class="stats">' + ''.join(f'<div><b data-count="{v}">{v:02d}</b><span>{esc(label)}</span></div>'
+                                                for v, label in stats) + '</div>', unsafe_allow_html=True)
+    by_id = {m['id']: m for m in visible}
     recent = [by_id[i] for i in recent_ids() if i in by_id][:4]
     if recent:
-        header(t['recent_title'], t['recent_sub'], '↺ RECENT')
-        cols = st.columns(2, gap='medium')
-        for n, item in enumerate(recent):
-            with cols[n % 2]:
-                card(item, lang, 'recent')
-    fresh = sorted((m for m in visible if m.get('new') and m['course_id'] in visible_ids), key=lambda m: m['new'], reverse=True)
+        header(t['recent_title'], t['recent_sub'], '↺')
+        material_list(recent, lang, 'recent')
+    fresh = sorted((m for m in visible if m.get('new')), key=lambda m: m['new'], reverse=True)
     if fresh:
-        header(t['new_title'], t['new_sub'], '✦ NEW')
-        cols = st.columns(2, gap='medium')
-        for n, item in enumerate(fresh[:4]):
-            with cols[n % 2]:
-                card(item, lang, 'fresh')
-    header(t['courses'], t['course_sub'], '02 / DISCOVER')
+        header(t['new_title'], t['new_sub'], '✦')
+        material_list(fresh[:4], lang, 'fresh')
+    header(t['courses'], t['course_sub'], f'{len(visible_courses):02d}')
     if not visible_courses:
         empty(t['empty_courses'], t['empty_desc'])
         return
-    cols = st.columns(3, gap='medium')
-    for index, course in enumerate(visible_courses):
-        with cols[index % 3]:
-            course_card(course, lang, materials, index)
+    for n, course in enumerate(visible_courses, 1):
+        own = [m for m in visible if m['course_id'] == course['id']]
+        lect = sum(m['kind'] == 'lectures' for m in own)
+        fresh_count = sum(bool(m.get('new')) for m in own)
+        if row('course_'+course['id'], n, display_course(course, lang), big=True,
+               sub=f'{lect} {t["lectures"]} · {len(own) - lect} {t["presentations"]}',
+               meta=f'{course.get("icon", "")}', new=f'+{fresh_count} {t["new"]}' if fresh_count else '',
+               button=t['open']+' →', button_key=f'course_{lang}_{course["id"]}'):
+            route('course', course=course['id'])
+    end_list()
 
 
 def course_page(config: dict, materials: list[dict], lang: str) -> None:
     t = I18N[lang]
     courses = [c for c in config['courses'] if lang in course_languages(c)]
     index = next((i for i, c in enumerate(courses) if c['id'] == st.session_state.get('course')), None)
-    if st.button(t['back_home'], key='back_course_page'):
+    if st.button(t['back_home'], key='back_course_page', type='tertiary'):
         route('home')
     if index is None:
         st.warning(t['unavailable'])
@@ -420,34 +399,30 @@ def course_page(config: dict, materials: list[dict], lang: str) -> None:
     groups = [(t['lectures_title'], [m for m in own if m['kind'] == 'lectures']),
               (t['presentations_title'], [m for m in own if m['kind'] == 'presentations'])]
     fresh = sum(bool(m.get('new')) for m in own)
-    chips = ''.join(f'<span><b>{len(items)}</b> {esc(title)}</span>' for title, items in groups)
-    chips += f'<span class="chip-new"><b>{fresh}</b> {esc(t["new"])}</span>' if fresh else ''
+    facts = ''.join(f'<div><b>{len(items):02d}</b><span>{esc(title)}</span></div>' for title, items in groups)
+    facts += f'<div class="fact-new"><b>{fresh:02d}</b><span>{esc(t["new"])}</span></div>' if fresh else ''
     st.markdown(
-        f'<div class="course-hero card-tone-{index % 6}"><div class="course-hero-icon">{esc(course.get("icon", "📘"))}</div>'
-        f'<div class="course-hero-copy"><span class="eyebrow">{index+1:02d} / COURSE · {esc(LANG_LABELS[lang])}</span>'
-        f'<h2>{esc(display_course(course, lang))}</h2><div class="course-hero-chips">{chips}</div></div></div>',
+        f'<section class="course-hero"><div class="hero-meta"><span>{index+1:02d} / {len(courses):02d}</span>'
+        f'<span>{esc(LANG_LABELS[lang])}</span><span>{esc(course.get("icon", ""))}</span><span>{len(own)} {esc(t["materials"])}</span></div>'
+        f'<h1>{esc(display_course(course, lang))}<span class="dot">.</span></h1><div class="stats">{facts}</div></section>',
         unsafe_allow_html=True,
     )
     if not own:
         empty(t['empty_materials'], t['empty_desc'])
         return
     for title, items in groups:
-        if not items:
-            continue
-        st.markdown(f'<div class="result-count"><span class="result-pip"></span>{esc(title)}: <b>{len(items)}</b><span class="result-rule"></span></div>', unsafe_allow_html=True)
-        cols = st.columns(2, gap='medium')
-        for n, item in enumerate(items):
-            with cols[n % 2]:
-                card(item, lang, 'course')
+        if items:
+            header(title, '', f'{len(items):02d}')
+            material_list(items, lang, 'course')
 
 
 def empty(title: str, subtitle: str) -> None:
-    st.markdown(f'<div class="empty-state"><div class="empty-symbol"><span>✦</span>▤</div><span class="eyebrow">COMING SOON</span><h3>{esc(title)}</h3><p>{esc(subtitle)}</p><div class="empty-dashes"><i></i><i></i><i></i></div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="empty-state"><span class="empty-mark">—</span><h3>{esc(title)}</h3><p>{esc(subtitle)}</p></div>', unsafe_allow_html=True)
 
 
 def library(config: dict, materials: list[dict], lang: str) -> None:
     t = I18N[lang]
-    header(t['catalog_head'], t['catalog_sub'], 'LIBRARY / '+LANG_LABELS[lang])
+    header(t['catalog_head'], t['catalog_sub'], LANG_LABELS[lang].split()[0])
     courses = [c for c in config['courses'] if lang in course_languages(c)]
     if not courses:
         empty(t['empty_courses'], t['empty_desc'])
@@ -458,16 +433,14 @@ def library(config: dict, materials: list[dict], lang: str) -> None:
     current = st.session_state.get('course', '')
     if current not in options:
         current = 'all'
-    with st.container(border=True):
-        st.markdown(f'<div class="filter-header"><div><span class="filter-icon">⌕</span><b>{esc(t["filters"])}</b></div><span>FIND YOUR CONTENT</span></div>', unsafe_allow_html=True)
-        a, b = st.columns([1.25, 1], gap='medium')
+    with st.container(key='filters'):
+        a, b, c = st.columns([1.5, 1, 1], gap='medium')
         with a:
             query = st.text_input(t['search'], placeholder=t['search_hint'], key=f'catalog_search_{lang}')
         with b:
             selected_course = st.selectbox(t['subject'], options, index=options.index(current),
                                            format_func=lambda slug: t['all_subjects'] if slug == 'all' else display_course(next(c for c in courses if c['id'] == slug), lang),
                                            key=f'course_selector_{lang}')
-        c, _ = st.columns([1, 1], gap='medium')
         with c:
             kind = st.selectbox(t['kind'], ['all', 'lectures', 'presentations'],
                                 format_func=lambda key: {'all':t['all_kinds'], 'lectures':t['lectures_one'], 'presentations':t['presentations_one']}[key],
@@ -476,14 +449,11 @@ def library(config: dict, materials: list[dict], lang: str) -> None:
     filtered = [m for m in materials if m['lang'] == lang and (selected_course == 'all' or m['course_id'] == selected_course)
                 and (kind == 'all' or m['kind'] == kind)
                 and (not query or query in (m['title']+' '+display_course(m['course'],lang)+' '+m['filename']).casefold())]
-    st.markdown(f'<div class="result-count"><span class="result-pip"></span>{esc(t["materials"])}: <b>{len(filtered)}</b><span class="result-rule"></span><span>STUDYSPACE CATALOG</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="result-count"><b>{len(filtered):02d}</b> {esc(t["materials"])}</div>', unsafe_allow_html=True)
     if not filtered:
         empty(t['empty_materials'], t['course_sub'])
         return
-    cols = st.columns(2, gap='medium')
-    for n, material in enumerate(filtered):
-        with cols[n % 2]:
-            card(material, lang, 'library')
+    material_list(filtered, lang, 'library')
 
 
 def reader(materials: list[dict], lang: str) -> None:
@@ -498,10 +468,11 @@ def reader(materials: list[dict], lang: str) -> None:
     st.session_state['recent'] = [item['id']] + [i for i in st.session_state.get('recent', []) if i != item['id']][:7]
     if item['lang'] != lang:
         lang = item['lang']; t = I18N[lang]
-    if st.button(t['back_course'], key='back_reader'):
+    if st.button(t['back_course'], key='back_reader', type='tertiary'):
         route('course', lang=lang, course=item['course_id'])
     header(item['title'], display_course(item['course'], lang), t['lectures_one'] if item['kind'] == 'lectures' else t['presentations_one'])
-    st.markdown(f'<div class="reader-tags">{badge(item["extension"].lstrip(".").upper())}{badge(LANG_LABELS[lang])}{badge(human_size(item["size"]))}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="meta-line">{esc(item["extension"].lstrip(".").upper())} · {esc(LANG_LABELS[lang])} · {esc(human_size(item["size"]))}'
+                + (f' · <span class="tag-new">{esc(t["new"])}</span>' if item.get('new') else '') + '</div>', unsafe_allow_html=True)
     repo, branch, _ = settings()
     try:
         filedata = material_bytes(repo, branch, item['path'], item['sha'])
@@ -561,7 +532,7 @@ def qr_dialog(link: str, title: str) -> None:
 
 def share(item: dict, t: dict) -> None:
     link = share_url(item)
-    with st.container(border=True):
+    with st.container(key='share'):
         st.markdown(f'<div class="share-card"><img class="share-qr" src="{qr_uri(link, 5)}" alt="QR">'
                     f'<div><span class="eyebrow">{esc(t["share"])}</span><b>{esc(t["share_title"])}</b>'
                     f'<p>{esc(t["share_hint"])}</p></div></div>', unsafe_allow_html=True)
@@ -572,7 +543,7 @@ def share(item: dict, t: dict) -> None:
 
 def about(lang: str) -> None:
     t = I18N[lang]
-    header(t['about_head'], t['about_body'], 'ABOUT / STUDYSPACE')
+    header(t['about_head'], t['about_body'], '§')
     if lang == 'kz':
         cards = [('Пәнді таңда', 'Барлық пәндер бір жерде.'),
                  ('Материалды тап', 'Ыңғайлы іздеу және сүзгілер.'),
@@ -669,7 +640,7 @@ def files_done(course_id: str, done: list[str], failed: list[str], prefix: str) 
 
 
 def admin(config: dict, materials: list[dict]) -> None:
-    header('Твоя учебная платформа.', 'Создавай дисциплины, загружай файлы и управляй цифровой библиотекой.', 'ADMIN / TEACHER WORKSPACE')
+    header('Твоя учебная платформа.', 'Создавай дисциплины, загружай файлы и управляй цифровой библиотекой.', '⚙')
     admin_password = secret('ADMIN_PASSWORD')
     token = secret('GITHUB_TOKEN')
     repo, branch, _ = settings()
@@ -933,11 +904,9 @@ def main() -> None:
     effects()
     config, materials, error = retrieve()
     initial_route(materials)
-    sidebar(config, materials)
+    topnav()
     page = st.session_state.get('page', 'welcome')
     lang = st.session_state.get('lang', '')
-    top_label = 'ADMIN CONSOLE' if page == 'admin' else ('ҚАЗАҚША БӨЛІМ' if lang == 'kz' else 'РУССКИЙ РАЗДЕЛ' if lang == 'ru' else 'RU / KZ')
-    st.markdown(f'<div class="top-brand"><span><span class="top-mark">✳</span> STUDYSPACE <span class="top-slash">/</span> EDUCATION HUB</span><span class="top-status"><i></i>{esc(top_label)}</span></div>', unsafe_allow_html=True)
     if error and page == 'admin':
         st.warning('Каталог GitHub временно недоступен. Показана локальная версия. '+error)
     elif error:
@@ -958,7 +927,8 @@ def main() -> None:
         about(lang)
     else:
         welcome()
-    st.markdown('<div class="footer"><span>✳ STUDYSPACE</span><span>MADE FOR LEARNING  ·  © 2026</span></div>', unsafe_allow_html=True)
+    st.markdown('<footer class="footer"><span>StudySpace<span class="dot">■</span></span><span>Лекции · Дәрістер · PDF · PPTX · DOCX</span>'
+                '<span>© 2026</span></footer>', unsafe_allow_html=True)
 
 
 if __name__ == '__main__':

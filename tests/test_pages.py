@@ -37,7 +37,7 @@ def test_uploaded_html_is_isolated(gh):
 def test_new_badge_and_section(gh):
     gh.recent = {U + 'algo/kz/presentations/Дәріс_1.pdf': '2026-11-05'}
     page = html_of(ok(app('home', 'kz')))
-    assert 'Жаңа материалдар' in page and 'badge-text new' in page
+    assert 'Жаңа материалдар' in page and 'tag-new' in page
 
 
 def test_badge_lookup_failure_does_not_break_site(gh):
