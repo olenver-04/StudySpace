@@ -5,6 +5,7 @@ server-side password authentication. GitHub credentials stay in st.secrets.
 """
 from __future__ import annotations
 
+import base64
 import html
 import hmac
 import json
@@ -23,14 +24,15 @@ from portal_logic import (
     safe_filename, slugify, upload_path, valid_slug,
 )
 
-st.set_page_config(page_title='StudySpace • Education Hub', page_icon='✳️', layout='wide', initial_sidebar_state='expanded')
+st.set_page_config(page_title='StudySpace • Education Hub', page_icon='✳️', layout='wide', initial_sidebar_state='auto')
 BASE = Path(__file__).resolve().parent
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 LANG_LABELS = {'ru': '🇷🇺 Русский', 'kz': '🇰🇿 Қазақша'}
 TEACHING_LANGUAGES = {'ru': '🇷🇺 Только русский', 'kz': '🇰🇿 Тек қазақша', 'both': '🌐 На двух языках'}
 OFFICE_PREVIEW = {'.pptx', '.ppt', '.docx', '.doc'}
 OFFICE_VIEWER_LIMIT = 10 * 1024 * 1024  # Office Online viewer refuses larger Word/PowerPoint files
-LOGIN_MAX_FAILS, LOGIN_WINDOW = 5, 300  # 5 wrong passwords per 5 minutes, across all visitors
+NEW_DAYS = 7  # how long an upload keeps its "new" badge
+LOGIN_MAX_FAILS, LOGIN_WINDOW =5, 300  # 5 wrong passwords per 5 minutes, across all visitors
 EMOJIS = ['📘', '💻', '☕', '🧩', '🗄️', '🛠️', '🌐', '📊', '🔬', '🧮', '🎨', '📐', '📚', '⚙️']
 
 I18N = {
@@ -54,6 +56,9 @@ I18N = {
         'note_title':'Твоя библиотека знаний', 'note_body':'Лекции, презентации и материалы для самостоятельной подготовки.',
         'offline':'Материалы временно недоступны. Обнови страницу немного позже.',
         'office_hint':'Если файл не отобразился, скачай его кнопкой ниже.',
+        'new':'НОВОЕ', 'new_title':'Новые материалы', 'new_sub':'Добавлено за последние 7 дней.',
+        'back_home':'← Ко всем предметам', 'back_course':'← К предмету',
+        'lectures_title':'Лекции', 'presentations_title':'Презентации',
         'share':'ПОДЕЛИТЬСЯ', 'share_title':'Ссылка на этот материал', 'qr_big':'⛶  QR на весь экран',
         'share_hint':'Отсканируй QR-код телефоном или скопируй ссылку кнопкой справа от неё.',
     },
@@ -77,6 +82,9 @@ I18N = {
         'note_title':'Сенің білім кітапханаң', 'note_body':'Дәрістер, презентациялар және өзіндік дайындыққа арналған материалдар.',
         'offline':'Материалдар уақытша қолжетімсіз. Бетті сәл кейінірек жаңартып көр.',
         'office_hint':'Файл көрсетілмесе, оны төмендегі батырмамен жүктеп ал.',
+        'new':'ЖАҢА', 'new_title':'Жаңа материалдар', 'new_sub':'Соңғы 7 күнде қосылғандар.',
+        'back_home':'← Барлық пәндерге', 'back_course':'← Пәнге оралу',
+        'lectures_title':'Дәрістер', 'presentations_title':'Презентациялар',
         'share':'БӨЛІСУ', 'share_title':'Осы материалға сілтеме', 'qr_big':'⛶  QR-код толық экранда',
         'share_hint':'QR-кодты телефонмен сканерле немесе сілтемені оның оң жағындағы батырмамен көшір.',
     },
@@ -124,9 +132,31 @@ def login_wait() -> int:
     return int(fails[0] + LOGIN_WINDOW - now) + 1 if len(fails) >= LOGIN_MAX_FAILS else 0
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def recent_uploads(repo: str, branch: str, token: str, since: str) -> dict[str, str]:
+    return GithubStore(repo, branch, token).recent_files(since)
+
+
+def mark_new(materials: list[dict]) -> None:
+    """Sets item['new'] to the upload date for files added in the last NEW_DAYS days."""
+    repo, branch, token = settings()
+    since = time.strftime('%Y-%m-%dT00:00:00Z', time.gmtime(time.time() - NEW_DAYS * 86400))
+    added = {}
+    # Up to ~30 API calls per 10 min: only with a token, or it would eat the 60/h anonymous
+    # limit that the catalog itself needs.
+    if token:
+        try:
+            added = recent_uploads(repo, branch, token, since)
+        except GithubError:
+            pass  # the badge is a nicety; never break the catalog over it
+    for item in materials:
+        item['new'] = added.get(item['path'], '')
+
+
 def refresh_data() -> None:
     github_data.clear()
     material_bytes.clear()
+    recent_uploads.clear()
 
 
 def retrieve() -> tuple[dict, list[dict], str | None]:
@@ -135,7 +165,9 @@ def retrieve() -> tuple[dict, list[dict], str | None]:
         config, tree = github_data(repo, branch, token)
         if not isinstance(config.get('courses'), list):
             raise GithubError('Неверный формат catalog.json.')
-        return config, parse_materials(tree, config['courses']), None
+        materials = parse_materials(tree, config['courses'])
+        mark_new(materials)
+        return config, materials, None
     except (GithubError, ValueError, KeyError, TypeError) as exc:
         # A failed remote read must never show made-up remote materials.
         try:
@@ -160,6 +192,10 @@ def route(page: str, *, lang: str | None = None, course: str = '', material: str
         st.query_params['lang'] = st.session_state['lang']
     if page == 'reader' and material:
         st.query_params['material'] = material
+    if page == 'course' and course:
+        st.query_params['course'] = course
+    if page in ('library', 'about'):
+        st.query_params['view'] = page  # also lets fx.js notice the page change and scroll to top
     st.rerun()
 
 
@@ -199,8 +235,13 @@ def initial_route(materials: list[dict]) -> None:
     lang = st.query_params.get('lang', '')
     material_id = st.query_params.get('material', '')
     found = next((i for i in materials if i['id'] == material_id), None)
+    course_id = st.query_params.get('course', '')
     if found:
         st.session_state.update(page='reader', lang=found['lang'], course=found['course_id'], material=material_id)
+    elif lang in LANG_LABELS and course_id:
+        st.session_state.update(page='course', lang=lang, course=course_id, material='')
+    elif lang in LANG_LABELS and st.query_params.get('view') in ('library', 'about'):
+        st.session_state.update(page=st.query_params['view'], lang=lang, course='', material='')
     elif lang in LANG_LABELS:
         st.session_state.update(page='home', lang=lang, course='', material='')
     else:
@@ -265,17 +306,19 @@ def welcome() -> None:
 
 def course_card(course: dict, lang: str, items: list[dict], index: int = 0) -> None:
     t = I18N[lang]
-    count = sum(m['lang'] == lang and m['course_id'] == course['id'] for m in items)
+    own = [m for m in items if m['lang'] == lang and m['course_id'] == course['id']]
+    fresh = sum(bool(m.get('new')) for m in own)
     with st.container(border=True):
         st.markdown(
             f'<div class="course-card-body card-tone-{index % 6}"><div class="course-head">'
-            f'<div class="course-emoji">{esc(course.get("icon", "📘"))}</div><span class="course-number">{index+1:02d} / COURSE</span></div>'
+            f'<div class="course-emoji">{esc(course.get("icon", "📘"))}</div>'
+            + (badge(f'+{fresh} {t["new"]}', 'new') if fresh else f'<span class="course-number">{index+1:02d} / COURSE</span>') + '</div>'
             f'<h3>{esc(display_course(course, lang))}</h3>'
-            f'<div class="course-card-foot"><span><span class="course-dot"></span>{count} {esc(t["materials"])}</span><span class="course-go">↗</span></div></div>',
+            f'<div class="course-card-foot"><span><span class="course-dot"></span>{len(own)} {esc(t["materials"])}</span><span class="course-go">↗</span></div></div>',
             unsafe_allow_html=True,
         )
         if st.button(t['open']+'   ↗', use_container_width=True, key=f'course_{lang}_{course["id"]}'):
-            route('library', course=course['id'])
+            route('course', course=course['id'])
 
 
 def card(item: dict, lang: str, prefix: str = '') -> None:
@@ -286,6 +329,7 @@ def card(item: dict, lang: str, prefix: str = '') -> None:
         st.markdown(
             '<div class="material-card-body">'
             + f'<div class="material-top"><span class="file-icon">{file_icon}</span><div class="material-meta">'
+            + (badge(t['new'], 'new') if item.get('new') else '')
             + badge(kindtext, 'lecture' if item['kind'] == 'lectures' else 'presentation')
             + badge(item['extension'].lstrip('.').upper())+'</div></div>'
             + f'<span class="material-course">{esc(display_course(item["course"], lang))}</span>'
@@ -322,6 +366,14 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
         f'<div><span class="stat-icon">▣</span><b data-count="{total_presentations}">{total_presentations:02d}</b><span>{esc(t["presentations"])}</span></div></div>',
         unsafe_allow_html=True,
     )
+    visible_ids = {c['id'] for c in visible_courses}
+    fresh = sorted((m for m in visible if m.get('new') and m['course_id'] in visible_ids), key=lambda m: m['new'], reverse=True)
+    if fresh:
+        header(t['new_title'], t['new_sub'], '✦ NEW')
+        cols = st.columns(2, gap='medium')
+        for n, item in enumerate(fresh[:4]):
+            with cols[n % 2]:
+                card(item, lang, 'fresh')
     header(t['courses'], t['course_sub'], '02 / DISCOVER')
     if not visible_courses:
         empty(t['empty_courses'], t['empty_desc'])
@@ -330,6 +382,41 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
     for index, course in enumerate(visible_courses):
         with cols[index % 3]:
             course_card(course, lang, materials, index)
+
+
+def course_page(config: dict, materials: list[dict], lang: str) -> None:
+    t = I18N[lang]
+    courses = [c for c in config['courses'] if lang in course_languages(c)]
+    index = next((i for i, c in enumerate(courses) if c['id'] == st.session_state.get('course')), None)
+    if st.button(t['back_home'], key='back_course_page'):
+        route('home')
+    if index is None:
+        st.warning(t['unavailable'])
+        return
+    course = courses[index]
+    own = [m for m in materials if m['lang'] == lang and m['course_id'] == course['id']]
+    groups = [(t['lectures_title'], [m for m in own if m['kind'] == 'lectures']),
+              (t['presentations_title'], [m for m in own if m['kind'] == 'presentations'])]
+    fresh = sum(bool(m.get('new')) for m in own)
+    chips = ''.join(f'<span><b>{len(items)}</b> {esc(title)}</span>' for title, items in groups)
+    chips += f'<span class="chip-new"><b>{fresh}</b> {esc(t["new"])}</span>' if fresh else ''
+    st.markdown(
+        f'<div class="course-hero card-tone-{index % 6}"><div class="course-hero-icon">{esc(course.get("icon", "📘"))}</div>'
+        f'<div class="course-hero-copy"><span class="eyebrow">{index+1:02d} / COURSE · {esc(LANG_LABELS[lang])}</span>'
+        f'<h2>{esc(display_course(course, lang))}</h2><div class="course-hero-chips">{chips}</div></div></div>',
+        unsafe_allow_html=True,
+    )
+    if not own:
+        empty(t['empty_materials'], t['empty_desc'])
+        return
+    for title, items in groups:
+        if not items:
+            continue
+        st.markdown(f'<div class="result-count"><span class="result-pip"></span>{esc(title)}: <b>{len(items)}</b><span class="result-rule"></span></div>', unsafe_allow_html=True)
+        cols = st.columns(2, gap='medium')
+        for n, item in enumerate(items):
+            with cols[n % 2]:
+                card(item, lang, 'course')
 
 
 def empty(title: str, subtitle: str) -> None:
@@ -388,8 +475,8 @@ def reader(materials: list[dict], lang: str) -> None:
         return
     if item['lang'] != lang:
         lang = item['lang']; t = I18N[lang]
-    if st.button(t['back'], key='back_reader'):
-        route('library', lang=lang, course=item['course_id'])
+    if st.button(t['back_course'], key='back_reader'):
+        route('course', lang=lang, course=item['course_id'])
     header(item['title'], display_course(item['course'], lang), t['lectures_one'] if item['kind'] == 'lectures' else t['presentations_one'])
     st.markdown(f'<div class="reader-tags">{badge(item["extension"].lstrip(".").upper())}{badge(LANG_LABELS[lang])}{badge(human_size(item["size"]))}</div>', unsafe_allow_html=True)
     repo, branch, _ = settings()
@@ -412,7 +499,9 @@ def reader(materials: list[dict], lang: str) -> None:
             else:
                 st.text(text)
     elif suffix == '.html':
-        st.iframe(filedata.decode('utf-8-sig', errors='replace'), height=650)
+        # A data: URL runs in an opaque origin, so scripts in an uploaded file cannot reach this app
+        # (an HTML string would be embedded same-origin and could click admin buttons).
+        st.iframe('data:text/html;charset=utf-8;base64,'+base64.b64encode(filedata).decode('ascii'), height=650)
     elif suffix in OFFICE_PREVIEW and item['size'] <= OFFICE_VIEWER_LIMIT:
         # Microsoft's viewer fetches the public raw GitHub file; the sha keeps its cache fresh.
         source = GithubStore(repo, branch).raw_url(item['path'])+'?rev='+item['sha']
@@ -770,6 +859,8 @@ def main() -> None:
         home(config, materials, lang)
     elif page == 'library':
         library(config, materials, lang)
+    elif page == 'course':
+        course_page(config, materials, lang)
     elif page == 'reader':
         reader(materials, lang)
     elif page == 'about':

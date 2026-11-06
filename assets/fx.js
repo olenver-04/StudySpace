@@ -26,6 +26,20 @@
       bar.style.transform = 'scaleX(' + (max > 0 ? el.scrollTop / max : 0) + ')';
     }, true);
 
+    // Streamlit keeps the scroll position between "pages"; jump to the top when the address changes.
+    var lastSearch = location.search;
+    setInterval(function () {
+      if (location.search === lastSearch) return;
+      lastSearch = location.search;
+      // Instant, and once more after the rerun redraws (a smooth scroll gets cut off by the redraw).
+      var toTop = function () {
+        [document.scrollingElement, document.querySelector('[data-testid="stMain"]'), document.querySelector('[data-testid="stAppViewContainer"]')]
+          .forEach(function (el) { if (el) el.scrollTop = 0; });
+      };
+      toTop();
+      setTimeout(toTop, 600);
+    }, 250);
+
     // Count-up for statistics; new nodes appear after every navigation.
     function countUp() {
       document.querySelectorAll('[data-count]:not([data-counted])').forEach(function (el) {

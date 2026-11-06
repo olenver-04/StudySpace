@@ -110,6 +110,27 @@ class GithubStore:
         if response.status_code == 404:
             raise GithubError('Файл уже удалён или не найден.')
 
+    def recent_files(self, since_iso: str, limit: int = 30) -> dict[str, str]:
+        """Paths added under materials/uploads since a date -> 'YYYY-MM-DD' of the first addition seen.
+
+        One request per commit, so only the latest `limit` commits are inspected.
+        Admin type changes (copy + delete) are skipped so moved files are not shown as new.
+        """
+        response = self.request('GET', f'{self.api}/commits', params={
+            'sha': self.branch, 'path': 'materials/uploads', 'since': since_iso, 'per_page': limit})
+        if response.status_code == 404:
+            return {}
+        added: dict[str, str] = {}
+        for commit in response.json():
+            if commit.get('commit', {}).get('message', '').startswith('StudySpace: move'):
+                continue
+            date = commit['commit']['committer']['date'][:10]
+            detail = self.request('GET', f'{self.api}/commits/{commit["sha"]}')
+            for changed in detail.json().get('files', []) if detail.ok else []:
+                if changed.get('status') in ('added', 'renamed'):
+                    added.setdefault(changed['filename'], date)  # newest commit first
+        return added
+
     def raw_url(self, path: str) -> str:
         return f'https://raw.githubusercontent.com/{self.repository}/{quote(self.branch, safe="")}/{quote(path, safe="/")}'
 
