@@ -147,7 +147,7 @@ def mark_new(materials: list[dict]) -> None:
     if token:
         try:
             added = recent_uploads(repo, branch, token, since)
-        except GithubError:
+        except Exception:  # noqa: BLE001 — also covers a stale github_store module after a Cloud update
             pass  # the badge is a nicety; never break the catalog over it
     for item in materials:
         item['new'] = added.get(item['path'], '')
