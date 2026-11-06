@@ -100,7 +100,12 @@ def parse_materials(tree: list[dict], courses: list[dict]) -> list[dict]:
             'extension': PurePosixPath(filename).suffix.lower(),
             'size': obj.get('size', 0), 'sha': obj.get('sha', ''),
         })
-    return sorted(result, key=lambda i: (i['course_id'], i['title'].casefold()))
+    return sorted(result, key=lambda i: (i['course_id'], natural_key(i['title'])))
+
+
+def natural_key(text: str) -> tuple:
+    """'Лекция 2' sorts before 'Лекция 10'. re.split keeps str/int alternating, so tuples compare."""
+    return tuple(int(part) if part.isdecimal() else part for part in re.split(r'(\d+)', text.casefold()))
 
 
 def display_course(course: dict, lang: str) -> str:

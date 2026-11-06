@@ -12,10 +12,10 @@ import mimetypes
 import time
 from collections import Counter
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
+import segno
 import streamlit as st
-import streamlit.components.v1 as components
 
 from github_store import GithubError, GithubStore
 from portal_logic import (
@@ -54,6 +54,8 @@ I18N = {
         'note_title':'Твоя библиотека знаний', 'note_body':'Лекции, презентации и материалы для самостоятельной подготовки.',
         'offline':'Материалы временно недоступны. Обнови страницу немного позже.',
         'office_hint':'Если файл не отобразился, скачай его кнопкой ниже.',
+        'share':'ПОДЕЛИТЬСЯ', 'share_title':'Ссылка на этот материал', 'qr_big':'⛶  QR на весь экран',
+        'share_hint':'Отсканируй QR-код телефоном или скопируй ссылку кнопкой справа от неё.',
     },
     'kz': {
         'home':'Бөлім', 'landing':'Басты бет', 'library':'Кітапхана', 'about':'Платформа туралы', 'choose':'Тілді таңдау',
@@ -75,6 +77,8 @@ I18N = {
         'note_title':'Сенің білім кітапханаң', 'note_body':'Дәрістер, презентациялар және өзіндік дайындыққа арналған материалдар.',
         'offline':'Материалдар уақытша қолжетімсіз. Бетті сәл кейінірек жаңартып көр.',
         'office_hint':'Файл көрсетілмесе, оны төмендегі батырмамен жүктеп ал.',
+        'share':'БӨЛІСУ', 'share_title':'Осы материалға сілтеме', 'qr_big':'⛶  QR-код толық экранда',
+        'share_hint':'QR-кодты телефонмен сканерле немесе сілтемені оның оң жағындағы батырмамен көшір.',
     },
 }
 
@@ -166,7 +170,7 @@ def style() -> None:
 def effects() -> None:
     # Zero-height iframe; the script copies itself into the main page once.
     with st.sidebar:
-        components.html('<script>'+(BASE/'assets/fx.js').read_text(encoding='utf-8')+'</script>', height=0)
+        st.iframe('<script>'+(BASE/'assets/fx.js').read_text(encoding='utf-8')+'</script>', height=1)
 
 
 def ticker(words: list[str]) -> None:
@@ -408,18 +412,50 @@ def reader(materials: list[dict], lang: str) -> None:
             else:
                 st.text(text)
     elif suffix == '.html':
-        components.html(filedata.decode('utf-8-sig', errors='replace'), height=650, scrolling=True)
+        st.iframe(filedata.decode('utf-8-sig', errors='replace'), height=650)
     elif suffix in OFFICE_PREVIEW and item['size'] <= OFFICE_VIEWER_LIMIT:
         # Microsoft's viewer fetches the public raw GitHub file; the sha keeps its cache fresh.
         source = GithubStore(repo, branch).raw_url(item['path'])+'?rev='+item['sha']
-        components.iframe('https://view.officeapps.live.com/op/embed.aspx?src='+quote(source, safe=''), height=640)
+        st.iframe('https://view.officeapps.live.com/op/embed.aspx?src='+quote(source, safe=''), height=640)
         st.caption(t['office_hint'])
     else:
         st.info(t['preview'])
     st.download_button(t['download'], filedata, file_name=item['filename'],
                        mime=mimetypes.guess_type(item['filename'])[0] or 'application/octet-stream',
                        type='primary', use_container_width=True, key='reader_download')
+    share(item, t)
     st.caption('StudySpace · '+t['quick'])
+
+
+def share_url(item: dict) -> str:
+    # SITE_URL in secrets wins; otherwise the address the visitor opened (Cloud adds a /~/+ prefix).
+    base = secret('SITE_URL')
+    if not base:
+        try:
+            base = (st.context.url or '').split('?')[0].replace('/~/+', '')
+        except Exception:
+            base = ''
+    return base.rstrip('/')+'/?'+urlencode({'lang': item['lang'], 'material': item['id']})
+
+
+def qr_uri(link: str, scale: int) -> str:
+    return segno.make(link, error='m').svg_data_uri(scale=scale, dark='#0B0912', light='#FFFFFF', border=2)
+
+
+@st.dialog('QR', width='large')
+def qr_dialog(link: str, title: str) -> None:
+    st.markdown(f'<div class="qr-big"><img src="{qr_uri(link, 14)}" alt="QR"><b>{esc(title)}</b></div>', unsafe_allow_html=True)
+
+
+def share(item: dict, t: dict) -> None:
+    link = share_url(item)
+    with st.container(border=True):
+        st.markdown(f'<div class="share-card"><img class="share-qr" src="{qr_uri(link, 5)}" alt="QR">'
+                    f'<div><span class="eyebrow">{esc(t["share"])}</span><b>{esc(t["share_title"])}</b>'
+                    f'<p>{esc(t["share_hint"])}</p></div></div>', unsafe_allow_html=True)
+        st.code(link, language=None)
+        if st.button(t['qr_big'], key='qr_big', use_container_width=True):
+            qr_dialog(link, item['title'])
 
 
 def about(lang: str) -> None:
@@ -443,6 +479,20 @@ def flash() -> None:
         message = st.session_state.pop(key, None)
         if message:
             fn(message)
+
+
+def files_done(course_id: str, done: list[str], failed: list[str], prefix: str) -> None:
+    """Report a bulk file action; on any success reload the catalog and clear the selection."""
+    if failed:
+        st.session_state['warning_msg'] = 'Не получилось:\n'+'\n'.join(failed)+'\nЕсли файлы только что меняли, обнови страницу через минуту.'
+    if not done:
+        st.warning(st.session_state.pop('warning_msg', 'Выбранные файлы уже этого типа.'))
+        return
+    refresh_data()
+    st.session_state['success_msg'] = f'{prefix}{len(done)}.'
+    for key in ('file_pick_'+course_id, 'confirm_file_'+course_id):
+        st.session_state.pop(key, None)
+    st.rerun()
 
 
 def admin(config: dict, materials: list[dict]) -> None:
@@ -647,18 +697,40 @@ def admin(config: dict, materials: list[dict]) -> None:
                 course_files = [m for m in materials if m['course_id'] == c['id']]
                 if course_files:
                     st.markdown('**Файлы дисциплины**')
-                    chosen = st.selectbox('Файл', course_files, key='file_pick_'+c['id'],
-                                          format_func=lambda m: f'{m["lang"].upper()} · {"Лекция" if m["kind"] == "lectures" else "Презентация"} · {m["filename"]}')
-                    sure = st.checkbox('Подтверждаю удаление файла', key='confirm_file_'+c['id'])
-                    if st.button('🗑 Удалить файл', disabled=not sure, key='delete_file_'+c['id']):
-                        try:
-                            github.delete_file(chosen['path'], chosen['sha'], 'StudySpace: delete '+chosen['path'])
-                            refresh_data()
-                            del st.session_state['confirm_file_'+c['id']]
-                            st.session_state['success_msg'] = f'Файл «{chosen["filename"]}» удалён. При необходимости его можно восстановить из истории GitHub.'
-                            st.rerun()
-                        except GithubError as exc:
-                            st.error(f'{exc} Если файл только что меняли, обнови страницу через минуту.')
+                    by_path = {m['path']: m for m in course_files}
+                    picked = st.multiselect(
+                        'Выбери файлы', list(by_path), key='file_pick_'+c['id'], placeholder='Один или несколько файлов',
+                        format_func=lambda p: f'{by_path[p]["lang"].upper()} · {"Лекция" if by_path[p]["kind"] == "lectures" else "Презентация"} · {by_path[p]["filename"]}')
+                    picked = [by_path[p] for p in picked if p in by_path]
+                    to_lect_col, to_pres_col = st.columns(2)
+                    to_lect = to_lect_col.button('▤ Сделать лекциями', disabled=not picked, key='to_lect_'+c['id'], use_container_width=True)
+                    to_pres = to_pres_col.button('▣ Сделать презентациями', disabled=not picked, key='to_pres_'+c['id'], use_container_width=True)
+                    if to_lect or to_pres:
+                        target = 'lectures' if to_lect else 'presentations'
+                        done, failed = [], []
+                        with st.spinner('Переношу файлы в GitHub…'):
+                            for m in picked:
+                                if m['kind'] == target:
+                                    continue
+                                try:
+                                    new_path = upload_path(c['id'], m['lang'], target, m['filename'])
+                                    # Copy first, delete second: a failure can leave a duplicate, never a lost file.
+                                    github.write_file(new_path, github.raw_bytes(m['path'], m['sha']), f'StudySpace: move {m["path"]} -> {new_path}')
+                                    github.delete_file(m['path'], m['sha'], 'StudySpace: moved to '+new_path)
+                                    done.append(m['filename'])
+                                except (GithubError, ValueError) as exc:
+                                    failed.append(f'{m["filename"]}: {exc}')
+                        files_done(c['id'], done, failed, 'Тип изменён у файлов: ')
+                    sure = st.checkbox('Подтверждаю удаление выбранных файлов', key='confirm_file_'+c['id'])
+                    if st.button('🗑 Удалить выбранные файлы', disabled=not (sure and picked), key='delete_file_'+c['id']):
+                        done, failed = [], []
+                        for m in picked:
+                            try:
+                                github.delete_file(m['path'], m['sha'], 'StudySpace: delete '+m['path'])
+                                done.append(m['filename'])
+                            except GithubError as exc:
+                                failed.append(f'{m["filename"]}: {exc}')
+                        files_done(c['id'], done, failed, 'Удалено (можно восстановить из истории GitHub): ')
                     st.markdown('<div class="side-rule"></div>', unsafe_allow_html=True)
                 st.caption('Удаление из каталога скрывает предмет для студентов, но не стирает файлы из GitHub.')
                 confirm = st.checkbox('Подтверждаю удаление из каталога', key='confirm_delete_'+c['id'])

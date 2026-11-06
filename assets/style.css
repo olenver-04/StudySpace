@@ -538,3 +538,18 @@ button[role="tab"] p {color: inherit !important}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {animation: none !important; transition: none !important; scroll-behavior: auto !important}
 }
+
+/* ---------- Share block (QR + link) ---------- */
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .share-card) {
+  margin-top: 18px; padding: 18px 20px !important; background: var(--grad-soft) !important;
+  border: 1px solid rgba(167,139,250,.25) !important; border-radius: var(--radius) !important;
+}
+.share-card {display: flex; align-items: center; gap: 18px}
+.share-qr {width: 112px; height: 112px; flex: none; border-radius: 14px; background: #fff; box-shadow: var(--glow)}
+.share-card b {display: block; margin: 2px 0 6px; font-family: var(--display); font-weight: 600; font-size: 17px; color: var(--text)}
+.share-card p {margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.7}
+.share-card .eyebrow {margin-bottom: 4px}
+.qr-big {display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center}
+.qr-big img {width: min(520px, 100%); height: auto; border-radius: 18px; background: #fff}
+.qr-big b {font-family: var(--display); font-size: 20px; color: var(--text)}
+@media (max-width: 600px) {.share-qr {width: 84px; height: 84px}}
