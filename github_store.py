@@ -102,9 +102,20 @@ class GithubStore:
         if self.get_sha(filename) is None:
             self.write_file(filename, b'', f'Create StudySpace folder {path}')
 
+    def delete_file(self, path: str, sha: str, message: str) -> None:
+        # A git delete: the file stays recoverable from repository history.
+        if not self.token:
+            raise GithubError('GITHUB_TOKEN не настроен.')
+        response = self.request('DELETE', self._content_url(path), json={'message': message, 'branch': self.branch, 'sha': sha})
+        if response.status_code == 404:
+            raise GithubError('Файл уже удалён или не найден.')
+
+    def raw_url(self, path: str) -> str:
+        return f'https://raw.githubusercontent.com/{self.repository}/{quote(self.branch, safe="")}/{quote(path, safe="/")}'
+
     def raw_bytes(self, path: str, sha: str) -> bytes:
         # This portal is public. Versioned raw URL prevents stale content after replacing a file.
-        url = f'https://raw.githubusercontent.com/{self.repository}/{quote(self.branch, safe="")}/{quote(path, safe="/")}'
+        url = self.raw_url(path)
         try:
             response = requests.get(url, params={'rev': sha}, timeout=30)
             response.raise_for_status()

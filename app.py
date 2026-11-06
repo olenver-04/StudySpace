@@ -9,8 +9,10 @@ import html
 import hmac
 import json
 import mimetypes
+import time
 from collections import Counter
 from pathlib import Path
+from urllib.parse import quote
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -26,6 +28,9 @@ BASE = Path(__file__).resolve().parent
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 LANG_LABELS = {'ru': '🇷🇺 Русский', 'kz': '🇰🇿 Қазақша'}
 TEACHING_LANGUAGES = {'ru': '🇷🇺 Только русский', 'kz': '🇰🇿 Тек қазақша', 'both': '🌐 На двух языках'}
+OFFICE_PREVIEW = {'.pptx', '.ppt', '.docx', '.doc'}
+OFFICE_VIEWER_LIMIT = 10 * 1024 * 1024  # Office Online viewer refuses larger Word/PowerPoint files
+LOGIN_MAX_FAILS, LOGIN_WINDOW = 5, 300  # 5 wrong passwords per 5 minutes, across all visitors
 EMOJIS = ['📘', '💻', '☕', '🧩', '🗄️', '🛠️', '🌐', '📊', '🔬', '🧮', '🎨', '📐', '📚', '⚙️']
 
 I18N = {
@@ -48,6 +53,7 @@ I18N = {
         'manage':'УПРАВЛЕНИЕ', 'teacher_panel':'Панель преподавателя', 'filters':'Фильтры',
         'note_title':'Твоя библиотека знаний', 'note_body':'Лекции, презентации и материалы для самостоятельной подготовки.',
         'offline':'Материалы временно недоступны. Обнови страницу немного позже.',
+        'office_hint':'Если файл не отобразился, скачай его кнопкой ниже.',
     },
     'kz': {
         'home':'Бөлім', 'landing':'Басты бет', 'library':'Кітапхана', 'about':'Платформа туралы', 'choose':'Тілді таңдау',
@@ -68,6 +74,7 @@ I18N = {
         'manage':'БАСҚАРУ', 'teacher_panel':'Оқытушы панелі', 'filters':'Сүзгілер',
         'note_title':'Сенің білім кітапханаң', 'note_body':'Дәрістер, презентациялар және өзіндік дайындыққа арналған материалдар.',
         'offline':'Материалдар уақытша қолжетімсіз. Бетті сәл кейінірек жаңартып көр.',
+        'office_hint':'Файл көрсетілмесе, оны төмендегі батырмамен жүктеп ал.',
     },
 }
 
@@ -97,6 +104,20 @@ def github_data(repo: str, branch: str, token: str) -> tuple[dict, list[dict]]:
 @st.cache_data(ttl=3600, show_spinner=False)
 def material_bytes(repo: str, branch: str, path: str, sha: str) -> bytes:
     return GithubStore(repo, branch).raw_bytes(path, sha)
+
+
+@st.cache_resource
+def login_failures() -> list[float]:
+    # One list shared by every visitor, so reloading the page does not reset the limit.
+    return []
+
+
+def login_wait() -> int:
+    """Seconds until the next login attempt is allowed (0 = allowed now)."""
+    fails = login_failures()
+    now = time.time()
+    fails[:] = [f for f in fails if now - f < LOGIN_WINDOW]
+    return int(fails[0] + LOGIN_WINDOW - now) + 1 if len(fails) >= LOGIN_MAX_FAILS else 0
 
 
 def refresh_data() -> None:
@@ -388,6 +409,11 @@ def reader(materials: list[dict], lang: str) -> None:
                 st.text(text)
     elif suffix == '.html':
         components.html(filedata.decode('utf-8-sig', errors='replace'), height=650, scrolling=True)
+    elif suffix in OFFICE_PREVIEW and item['size'] <= OFFICE_VIEWER_LIMIT:
+        # Microsoft's viewer fetches the public raw GitHub file; the sha keeps its cache fresh.
+        source = GithubStore(repo, branch).raw_url(item['path'])+'?rev='+item['sha']
+        components.iframe('https://view.officeapps.live.com/op/embed.aspx?src='+quote(source, safe=''), height=640)
+        st.caption(t['office_hint'])
     else:
         st.info(t['preview'])
     st.download_button(t['download'], filedata, file_name=item['filename'],
@@ -435,11 +461,17 @@ def admin(config: dict, materials: list[dict]) -> None:
             pwd = st.text_input('Пароль администратора', type='password')
             submit = st.form_submit_button('Войти', type='primary', use_container_width=True)
         if submit:
-            if hmac.compare_digest(pwd.encode('utf-8'), admin_password.encode('utf-8')):
+            wait = login_wait()
+            if wait:
+                st.error(f'Слишком много неверных попыток. Попробуй снова через {wait // 60} мин {wait % 60} с.')
+            elif hmac.compare_digest(pwd.encode('utf-8'), admin_password.encode('utf-8')):
                 st.session_state['admin_ok'] = True
                 st.rerun()
             else:
-                st.error('Неверный пароль.')
+                login_failures().append(time.time())
+                time.sleep(1)  # slows down guessing scripts
+                left = LOGIN_MAX_FAILS - len(login_failures())
+                st.error('Неверный пароль.' + (f' Осталось попыток: {left}.' if left > 0 else ' Вход временно заблокирован на 5 минут.'))
         return
     top, out = st.columns([4, 1])
     with top:
@@ -612,6 +644,22 @@ def admin(config: dict, materials: list[dict]) -> None:
                                 st.rerun()
                             except GithubError as exc:
                                 st.error(str(exc))
+                course_files = [m for m in materials if m['course_id'] == c['id']]
+                if course_files:
+                    st.markdown('**Файлы дисциплины**')
+                    chosen = st.selectbox('Файл', course_files, key='file_pick_'+c['id'],
+                                          format_func=lambda m: f'{m["lang"].upper()} · {"Лекция" if m["kind"] == "lectures" else "Презентация"} · {m["filename"]}')
+                    sure = st.checkbox('Подтверждаю удаление файла', key='confirm_file_'+c['id'])
+                    if st.button('🗑 Удалить файл', disabled=not sure, key='delete_file_'+c['id']):
+                        try:
+                            github.delete_file(chosen['path'], chosen['sha'], 'StudySpace: delete '+chosen['path'])
+                            refresh_data()
+                            del st.session_state['confirm_file_'+c['id']]
+                            st.session_state['success_msg'] = f'Файл «{chosen["filename"]}» удалён. При необходимости его можно восстановить из истории GitHub.'
+                            st.rerun()
+                        except GithubError as exc:
+                            st.error(f'{exc} Если файл только что меняли, обнови страницу через минуту.')
+                    st.markdown('<div class="side-rule"></div>', unsafe_allow_html=True)
                 st.caption('Удаление из каталога скрывает предмет для студентов, но не стирает файлы из GitHub.')
                 confirm = st.checkbox('Подтверждаю удаление из каталога', key='confirm_delete_'+c['id'])
                 if st.button('Убрать дисциплину', disabled=not confirm, key='delete_course_'+c['id']):
