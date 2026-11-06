@@ -26,7 +26,7 @@ from portal_logic import (
     safe_filename, slugify, upload_path, valid_slug,
 )
 
-st.set_page_config(page_title='StudySpace • Education Hub', page_icon='✳️', layout='wide', initial_sidebar_state='collapsed')
+st.set_page_config(page_title='StudySpace • Education Hub', page_icon='🟥', layout='wide', initial_sidebar_state='collapsed')
 BASE = Path(__file__).resolve().parent
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 LANG_LABELS = {'ru': '🇷🇺 Русский', 'kz': '🇰🇿 Қазақша'}
@@ -59,6 +59,9 @@ I18N = {
         'offline':'Материалы временно недоступны. Обнови страницу немного позже.',
         'office_hint':'Если файл не отобразился, скачай его кнопкой ниже.',
         'nav_home':'Главная', 'nav_admin':'Преподавателю',
+        'poster':'Плакат A4 с QR-кодом', 'poster_download':'↓ Скачать плакат (HTML)', 'print':'Печать / PDF',
+        'poster_scan':'Все материалы — по QR-коду',
+        'poster_hint':'Наведи камеру телефона на код, чтобы открыть лекции и презентации этого предмета.',
         'recent_title':'Недавно открытые', 'recent_sub':'Материалы, которые ты открывал на этом устройстве.',
         'new':'НОВОЕ', 'new_title':'Новые материалы', 'new_sub':'Добавлено за последние 7 дней.',
         'back_home':'← Ко всем предметам', 'back_course':'← К предмету',
@@ -87,6 +90,9 @@ I18N = {
         'offline':'Материалдар уақытша қолжетімсіз. Бетті сәл кейінірек жаңартып көр.',
         'office_hint':'Файл көрсетілмесе, оны төмендегі батырмамен жүктеп ал.',
         'nav_home':'Басты бет', 'nav_admin':'Оқытушыға',
+        'poster':'QR-коды бар A4 плакат', 'poster_download':'↓ Плакатты жүктеу (HTML)', 'print':'Басып шығару / PDF',
+        'poster_scan':'Барлық материал — QR-код арқылы',
+        'poster_hint':'Осы пәннің дәрістері мен презентацияларын ашу үшін телефон камерасын кодқа бағытта.',
         'recent_title':'Соңғы ашылғандар', 'recent_sub':'Осы құрылғыда ашқан материалдарың.',
         'new':'ЖАҢА', 'new_title':'Жаңа материалдар', 'new_sub':'Соңғы 7 күнде қосылғандар.',
         'back_home':'← Барлық пәндерге', 'back_course':'← Пәнге оралу',
@@ -410,6 +416,9 @@ def course_page(config: dict, materials: list[dict], lang: str) -> None:
     if not own:
         empty(t['empty_materials'], t['empty_desc'])
         return
+    if st.button(t['poster']+'  →', key='poster', type='secondary'):
+        poster_dialog(poster_html(course, lang, groups[0][1] + groups[1][1], index + 1, len(courses)),
+                      f'StudySpace-{course["id"]}-{lang}.html', t['poster_download'])
     for title, items in groups:
         if items:
             header(title, '', f'{len(items):02d}')
@@ -510,7 +519,7 @@ def reader(materials: list[dict], lang: str) -> None:
     st.caption('StudySpace · '+t['quick'])
 
 
-def share_url(item: dict) -> str:
+def site_url(**params: str) -> str:
     # SITE_URL in secrets wins; otherwise the address the visitor opened (Cloud adds a /~/+ prefix).
     base = secret('SITE_URL')
     if not base:
@@ -518,7 +527,85 @@ def share_url(item: dict) -> str:
             base = (st.context.url or '').split('?')[0].replace('/~/+', '')
         except Exception:
             base = ''
-    return base.rstrip('/')+'/?'+urlencode({'lang': item['lang'], 'material': item['id']})
+    return base.rstrip('/')+'/?'+urlencode(params)
+
+
+def share_url(item: dict) -> str:
+    return site_url(lang=item['lang'], material=item['id'])
+
+
+POSTER_ROWS = 14  # what fits on A4 under the title and above the QR block
+POSTER_CSS = """
+@page {size: A4; margin: 0}
+* {box-sizing: border-box; margin: 0; padding: 0}
+body {background: #d9d6d0; font-family: Inter, Arial, sans-serif; color: #111}
+.bar {position: sticky; top: 0; z-index: 2; display: flex; justify-content: flex-end; padding: 10px; background: #d9d6d0}
+.bar button {font: 600 14px Inter, Arial; background: #111; color: #fff; border: 0; padding: 12px 22px; cursor: pointer}
+.bar button:hover {background: #E3241B}
+.sheet {width: 210mm; height: 297mm; margin: 0 auto 20px; background: #F4F2EE; padding: 16mm 16mm 14mm;
+        display: flex; flex-direction: column; transform-origin: top center}
+.meta {display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1.2pt solid #111; padding-top: 2.5mm;
+       font: 8pt 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: .04em}
+.brand {font: 800 11pt 'Inter Tight', Arial; text-transform: none; letter-spacing: -.03em}
+.red {color: #E3241B}
+h1 {font-family: 'Inter Tight', Arial; font-weight: 700; line-height: .92; letter-spacing: -.05em; margin: 22mm 0 7mm; overflow-wrap: anywhere}
+.facts {font: 9pt 'JetBrains Mono', monospace; text-transform: uppercase; margin-bottom: 9mm}
+ol {list-style: none; border-top: 1.2pt solid #111}
+li {display: grid; grid-template-columns: 12mm 1fr auto; gap: 3mm; align-items: baseline; padding: 2.4mm 0; border-bottom: .5pt solid #bdb8b0}
+li span, li i {font: 8pt 'JetBrains Mono', monospace; font-style: normal; color: #555; text-transform: uppercase}
+li b {font: 600 11.5pt 'Inter Tight', Arial; letter-spacing: -.01em}
+.more {font: 8pt 'JetBrains Mono', monospace; margin-top: 2mm; color: #555}
+.foot {margin-top: auto; display: grid; grid-template-columns: 62mm 1fr; gap: 8mm; align-items: end; border-top: 1.2pt solid #111; padding-top: 6mm}
+.foot img {width: 62mm; height: 62mm; display: block}
+.foot b {display: block; font: 700 24pt/1 'Inter Tight', Arial; letter-spacing: -.04em; margin-bottom: 4mm}
+.foot p {font-size: 10pt; line-height: 1.45; color: #333}
+.foot small {display: block; margin-top: 4mm; font: 7pt 'JetBrains Mono', monospace; color: #555; word-break: break-all}
+@media print {body {background: none} .bar {display: none} .sheet {margin: 0; transform: none !important}}
+"""
+# Fit the A4 sheet into the preview width; printing ignores this (see @media print).
+POSTER_JS = """
+function fit() { var s = document.getElementById('sheet'); var k = Math.min(1, (innerWidth - 20) / s.offsetWidth);
+  s.style.transform = 'scale(' + k + ')'; s.style.marginBottom = (s.offsetHeight * (k - 1) + 20) + 'px'; }
+addEventListener('resize', fit); fit();
+"""
+
+
+def poster_html(course: dict, lang: str, items: list[dict], number: int, total: int) -> str:
+    """Self-contained A4 poster (Swiss style) with a QR code to the course page."""
+    t = I18N[lang]
+    title = display_course(course, lang)
+    link = site_url(lang=lang, course=course['id'])
+    lectures = sum(m['kind'] == 'lectures' for m in items)
+    rows = ''.join(
+        f'<li><span>{n:02d}</span><b>{esc(m["title"])}</b>'
+        f'<i>{esc(t["lectures_one"] if m["kind"] == "lectures" else t["presentations_one"])}</i></li>'
+        for n, m in enumerate(items[:POSTER_ROWS], 1))
+    more = f'<p class="more">+ {len(items) - POSTER_ROWS} {esc(t["materials"])}</p>' if len(items) > POSTER_ROWS else ''
+    size = 84 if len(title) < 18 else 64 if len(title) < 32 else 48  # pt; long Kazakh titles must still fit
+    return (
+        f'<!doctype html><html lang="{"kk" if lang == "kz" else "ru"}"><head><meta charset="utf-8">'
+        f'<title>{esc(title)} · StudySpace</title>'
+        '<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500'
+        '&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">'
+        f'<style>{POSTER_CSS} h1 {{font-size: {size}pt}}</style></head><body>'
+        f'<div class="bar"><button onclick="window.print()">{esc(t["print"])}</button></div>'
+        '<main class="sheet" id="sheet">'
+        f'<div class="meta"><span class="brand">StudySpace<span class="red">■</span></span><span>{number:02d} / {total:02d}</span>'
+        f'<span>{esc(LANG_LABELS[lang].split()[-1])}</span><span>2026</span></div>'
+        f'<h1>{esc(title)}<span class="red">.</span></h1>'
+        f'<div class="facts">{lectures} {esc(t["lectures"])} · {len(items) - lectures} {esc(t["presentations"])}</div>'
+        f'<ol>{rows}</ol>{more}'
+        f'<div class="foot"><img src="{qr_uri(link, 10)}" alt="QR"><div><b>{esc(t["poster_scan"])}</b>'
+        f'<p>{esc(t["poster_hint"])}</p><small>{esc(link)}</small></div></div>'
+        f'</main><script>{POSTER_JS}</script></body></html>'
+    )
+
+
+@st.dialog('A4', width='large')
+def poster_dialog(page: str, filename: str, label: str) -> None:
+    # Isolated data: frame (like uploaded HTML); its own button prints just the poster.
+    st.iframe('data:text/html;charset=utf-8;base64,'+base64.b64encode(page.encode('utf-8')).decode('ascii'), height=760)
+    st.download_button(label, page.encode('utf-8'), file_name=filename, mime='text/html', use_container_width=True)
 
 
 def qr_uri(link: str, scale: int) -> str:

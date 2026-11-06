@@ -55,3 +55,14 @@ def test_recently_opened(gh):
 def test_course_page_groups(gh):
     page = html_of(ok(app('course', 'ru', course='algo')))
     assert 'course-hero' in page and 'Лекции' in page and 'Презентации' in page
+
+
+def test_course_poster(gh):
+    at = ok(app('course', 'ru', course='algo'))
+    at.button(key='poster').click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    import app as site
+    page = site.poster_html({'id': 'algo', 'title_ru': 'A<b>', 'icon': '🧮'}, 'ru',
+                            [{'title': f'Лекция {n}', 'kind': 'lectures'} for n in range(20)], 1, 2)
+    assert 'A&lt;b&gt;' in page and 'data:image/svg+xml' in page and 'course=algo' in page
+    assert '+ 6 материалов' in page  # 20 items, 14 fit on the sheet
