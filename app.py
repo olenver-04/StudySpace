@@ -13,8 +13,9 @@ import mimetypes
 import time
 from collections import Counter
 from pathlib import Path
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, unquote, urlencode
 
+import requests
 import segno
 import streamlit as st
 
@@ -56,6 +57,7 @@ I18N = {
         'note_title':'Твоя библиотека знаний', 'note_body':'Лекции, презентации и материалы для самостоятельной подготовки.',
         'offline':'Материалы временно недоступны. Обнови страницу немного позже.',
         'office_hint':'Если файл не отобразился, скачай его кнопкой ниже.',
+        'recent_title':'Недавно открытые', 'recent_sub':'Материалы, которые ты открывал на этом устройстве.',
         'new':'НОВОЕ', 'new_title':'Новые материалы', 'new_sub':'Добавлено за последние 7 дней.',
         'back_home':'← Ко всем предметам', 'back_course':'← К предмету',
         'lectures_title':'Лекции', 'presentations_title':'Презентации',
@@ -82,6 +84,7 @@ I18N = {
         'note_title':'Сенің білім кітапханаң', 'note_body':'Дәрістер, презентациялар және өзіндік дайындыққа арналған материалдар.',
         'offline':'Материалдар уақытша қолжетімсіз. Бетті сәл кейінірек жаңартып көр.',
         'office_hint':'Файл көрсетілмесе, оны төмендегі батырмамен жүктеп ал.',
+        'recent_title':'Соңғы ашылғандар', 'recent_sub':'Осы құрылғыда ашқан материалдарың.',
         'new':'ЖАҢА', 'new_title':'Жаңа материалдар', 'new_sub':'Соңғы 7 күнде қосылғандар.',
         'back_home':'← Барлық пәндерге', 'back_course':'← Пәнге оралу',
         'lectures_title':'Дәрістер', 'presentations_title':'Презентациялар',
@@ -204,9 +207,9 @@ def style() -> None:
 
 
 def effects() -> None:
-    # Zero-height iframe; the script copies itself into the main page once.
-    with st.sidebar:
-        st.iframe('<script>'+(BASE/'assets/fx.js').read_text(encoding='utf-8')+'</script>', height=1)
+    # Hidden iframe; the script copies itself into the main page once. It lives in the main area:
+    # a collapsed sidebar (default on phones) does not render its contents, so the script would never run.
+    st.iframe('<script>'+(BASE/'assets/fx.js').read_text(encoding='utf-8')+'</script>', height=1)
 
 
 def ticker(words: list[str]) -> None:
@@ -340,6 +343,17 @@ def card(item: dict, lang: str, prefix: str = '') -> None:
             route('reader', course=item['course_id'], material=item['id'])
 
 
+def recent_ids() -> list[str]:
+    """Materials opened in this visit first, then earlier visits (cookie written by fx.js)."""
+    try:
+        raw = st.context.cookies.get('ss_recent')
+    except Exception:
+        raw = None
+    saved = unquote(raw).split('|') if isinstance(raw, str) else []
+    ids = st.session_state.get('recent', []) + saved
+    return [i for n, i in enumerate(ids) if i and i not in ids[:n]]
+
+
 def home(config: dict, materials: list[dict], lang: str) -> None:
     t = I18N[lang]
     visible_courses = [c for c in config['courses'] if lang in course_languages(c)]
@@ -367,6 +381,14 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
         unsafe_allow_html=True,
     )
     visible_ids = {c['id'] for c in visible_courses}
+    by_id = {m['id']: m for m in visible if m['course_id'] in visible_ids}
+    recent = [by_id[i] for i in recent_ids() if i in by_id][:4]
+    if recent:
+        header(t['recent_title'], t['recent_sub'], '↺ RECENT')
+        cols = st.columns(2, gap='medium')
+        for n, item in enumerate(recent):
+            with cols[n % 2]:
+                card(item, lang, 'recent')
     fresh = sorted((m for m in visible if m.get('new') and m['course_id'] in visible_ids), key=lambda m: m['new'], reverse=True)
     if fresh:
         header(t['new_title'], t['new_sub'], '✦ NEW')
@@ -473,6 +495,7 @@ def reader(materials: list[dict], lang: str) -> None:
         if st.button(t['back']):
             route('library')
         return
+    st.session_state['recent'] = [item['id']] + [i for i in st.session_state.get('recent', []) if i != item['id']][:7]
     if item['lang'] != lang:
         lang = item['lang']; t = I18N[lang]
     if st.button(t['back_course'], key='back_reader'):
@@ -568,6 +591,67 @@ def flash() -> None:
         message = st.session_state.pop(key, None)
         if message:
             fn(message)
+
+
+def telegram_ready() -> bool:
+    return bool(secret('TELEGRAM_BOT_TOKEN') and secret('TELEGRAM_CHAT_ID'))
+
+
+def telegram_api(method: str, **payload) -> dict:
+    # Errors never include the URL: it contains the bot token.
+    try:
+        return requests.post(f'https://api.telegram.org/bot{secret("TELEGRAM_BOT_TOKEN")}/{method}', json=payload, timeout=15).json()
+    except (requests.RequestException, ValueError):
+        return {'ok': False, 'description': 'Telegram недоступен, попробуй позже.'}
+
+
+def telegram_send(text: str) -> str | None:
+    """Posts to the group chat; returns an error text, or None on success."""
+    data = telegram_api('sendMessage', chat_id=secret('TELEGRAM_CHAT_ID'), text=text,
+                        parse_mode='HTML', disable_web_page_preview=True)
+    return None if data.get('ok') else 'Telegram: '+str(data.get('description', 'ошибка'))[:200]
+
+
+def upload_message(course: dict, lang: str, kind: str, files: list[tuple[str, str]]) -> str:
+    t = I18N[lang]
+    kind_name = t['lectures_title'] if kind == 'lectures' else t['presentations_title']
+    lines = [f'📚 <b>{html.escape(t["new_title"])}</b>',
+             f'{html.escape(course.get("icon", "📘"))} {html.escape(display_course(course, lang))} · {html.escape(kind_name)}', '']
+    for filename, path in files:
+        title = Path(filename).stem.replace('_', ' ')
+        lines.append(f'• <a href="{html.escape(share_url({"lang": lang, "id": path}), quote=True)}">{html.escape(title)}</a>')
+    return '\n'.join(lines)
+
+
+def telegram_settings() -> None:
+    with st.expander('🔔 Уведомления в Telegram' + (' — включены' if telegram_ready() else ' — выключены')):
+        if telegram_ready():
+            st.caption('После каждой загрузки бот пишет в чат группы, какие файлы появились, со ссылками на них.')
+            if st.button('Отправить тестовое сообщение', key='tg_test'):
+                error = telegram_send('✅ StudySpace: уведомления работают.')
+                if error:
+                    st.error(error)
+                else:
+                    st.success('Сообщение отправлено, проверь чат.')
+            return
+        st.markdown(
+            '1. В Telegram открой **@BotFather**, отправь `/newbot` и получи токен бота.\n'
+            '2. Добавь бота в канал или группу (в канале — администратором).\n'
+            '3. В Streamlit Cloud → Settings → Secrets добавь `TELEGRAM_BOT_TOKEN = "токен"`.\n'
+            '4. Напиши что-нибудь в группе, нажми кнопку ниже и скопируй нужный ID в `TELEGRAM_CHAT_ID = "..."`.\n'
+            '   Для публичного канала подойдёт и его адрес: `TELEGRAM_CHAT_ID = "@имя_канала"`.')
+        if secret('TELEGRAM_BOT_TOKEN') and st.button('Найти ID чатов', key='tg_find'):
+            data = telegram_api('getUpdates')
+            chats = {}
+            for update in data.get('result', []):
+                for key in ('message', 'channel_post', 'my_chat_member'):
+                    chat = (update.get(key) or {}).get('chat')
+                    if chat:
+                        chats[chat['id']] = chat.get('title') or chat.get('username') or chat.get('first_name', '')
+            if chats:
+                st.code('\n'.join(f'{cid}  —  {name}' for cid, name in chats.items()), language=None)
+            else:
+                st.info(data.get('description') if not data.get('ok') else 'Бот пока не видел сообщений. Напиши в группе и нажми ещё раз.')
 
 
 def files_done(course_id: str, done: list[str], failed: list[str], prefix: str) -> None:
@@ -724,18 +808,25 @@ def admin(config: dict, materials: list[dict]) -> None:
                                 filename = safe_filename(file.name)
                                 path = upload_path(course['id'], language, kind, filename)
                                 github.write_file(path, file.getvalue(), 'StudySpace: upload '+path, replace=replace)
-                                successes.append(filename)
+                                successes.append((filename, path))
                             except (GithubError, ValueError) as exc:
                                 failures.append(f'{file.name}: {exc}')
                         if successes:
                             refresh_data()
                             st.session_state['success_msg'] = f'✅ Загружено файлов: {len(successes)}. Они уже сохранены в GitHub.'
+                            if telegram_ready():
+                                tg_error = telegram_send(upload_message(course, language, kind, successes))
+                                if tg_error:
+                                    failures.append(tg_error)
+                                else:
+                                    st.session_state['success_msg'] += ' Уведомление отправлено в Telegram.'
                         if failures:
-                            st.session_state['warning_msg'] = 'Не удалось загрузить:\n'+'\n'.join(failures)
+                            st.session_state['warning_msg'] = 'Не получилось:\n'+'\n'.join(failures)
                         if successes:
                             st.rerun()
                         if failures:
                             st.warning(st.session_state.pop('warning_msg'))
+        telegram_settings()
     with manage_tab:
         st.markdown('#### ▦ Дисциплины в каталоге')
         if not config['courses']:

@@ -601,3 +601,6 @@ button[role="tab"] p {color: inherit !important}
 
 /* Uploaded HTML lectures assume a white page; give their isolated frame one. */
 iframe[src^="data:text/html"] {background: #fff; border-radius: 16px; border: 1px solid var(--line-2)}
+
+/* The effects loader iframe (srcdoc mentions ss-fx): kept in the DOM so it runs, but takes no space. */
+[data-testid="stElementContainer"]:has(iframe[srcdoc*="ss-fx"]) {position: absolute !important; width: 0; height: 0; overflow: hidden; margin: 0}
