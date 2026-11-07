@@ -363,7 +363,29 @@ def initial_route(materials: list[dict]) -> None:
         st.session_state.update(page='welcome', lang='', course='', material='')
 
 
-def topnav() -> None:
+def switch_language(config: dict, materials: list[dict], other: str) -> None:
+    """Same page in the other language. route() reruns, so the first matching branch wins."""
+    page = st.session_state.get('page', 'home')
+    if page in ('home', 'library', 'about', 'admin'):
+        route(page, lang=other)
+    course_id = st.session_state.get('course', '')
+    course = next((c for c in config['courses'] if c.get('id') == course_id), None)
+    if page in ('course', 'reader') and course and other in course_languages(course):
+        if page == 'reader':
+            # The counterpart is the material at the same position in the course (Тема 1.1 ↔ Тақырып 1.1);
+            # order matches the reader and course page: lectures first, then natural title order.
+            def order(lang: str) -> list[dict]:
+                return sorted((m for m in materials if m['course_id'] == course_id and m['lang'] == lang),
+                              key=lambda m: m['kind'] != 'lectures')
+            here, there = order(st.session_state.get('lang', '')), order(other)
+            position = next((i for i, m in enumerate(here) if m['id'] == st.session_state.get('material')), 0)
+            if there:
+                route('reader', lang=other, course=course_id, material=there[min(position, len(there) - 1)]['id'])
+        route('course', lang=other, course=course_id)
+    route('home', lang=other)
+
+
+def topnav(config: dict, materials: list[dict]) -> None:
     """Top bar: brand, sections, teacher link, language switch. Replaces the old sidebar."""
     lang = st.session_state.get('lang', '')
     t = I18N.get(lang, I18N['ru'])
@@ -389,7 +411,7 @@ def topnav() -> None:
                           '<span aria-hidden="true">◐</span></button>', unsafe_allow_html=True)
         if cols[-2].button(other.upper() if other else 'RU/KZ', key='nav-lang', help=t['change_lang']):
             if other:
-                route('home', lang=other)
+                switch_language(config, materials, other)
             else:
                 route('welcome', lang='')
         with cols[-1], st.container(key='nav-menu'), st.popover(t['menu'], use_container_width=True):
@@ -1373,7 +1395,7 @@ def main() -> None:
     initial_route(materials)
     st.session_state['mixed'] = any(m['kind'] == 'lectures' for m in materials)
     start_index(config, materials)
-    topnav()
+    topnav(config, materials)
     page = st.session_state.get('page', 'welcome')
     lang = st.session_state.get('lang', '')
     if error and page == 'admin':
