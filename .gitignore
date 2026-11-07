@@ -7,3 +7,4 @@ __pycache__/
 static/fulltext.json
 static/thumbs/
 static/*.tmp
+static/slides/
