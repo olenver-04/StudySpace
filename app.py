@@ -11,6 +11,7 @@ import html
 import hmac
 import json
 import mimetypes
+import re
 import time
 from collections import Counter
 from pathlib import Path
@@ -20,6 +21,7 @@ import requests
 import segno
 import streamlit as st
 
+from fulltext import FullText
 from github_store import GithubError, GithubStore
 from portal_logic import (
     ALLOWED_EXTENSIONS, course_languages, display_course, human_size, parse_materials,
@@ -59,6 +61,8 @@ I18N = {
         'offline':'Материалы временно недоступны. Обнови страницу немного позже.',
         'office_hint':'Если файл не отобразился, скачай его кнопкой ниже.',
         'nav_home':'Главная', 'nav_admin':'Преподавателю',
+        'studied':'изучено', 'studied_title':'Изучено', 'mark_done':'✓  Отметить как изученное',
+        'unmark_done':'✓  Изучено · снять отметку', 'in_text':'В тексте',
         'search_open':'Поиск', 'search_ph':'Найти предмет или материал…', 'search_empty':'Ничего не найдено',
         'course_word':'Предмет', 'prev':'Предыдущий', 'next':'Следующий',
         'f_course':'Предмет', 'f_kind':'Тип', 'f_format':'Формат', 'f_size':'Размер', 'f_lang':'Язык',
@@ -95,6 +99,8 @@ I18N = {
         'offline':'Материалдар уақытша қолжетімсіз. Бетті сәл кейінірек жаңартып көр.',
         'office_hint':'Файл көрсетілмесе, оны төмендегі батырмамен жүктеп ал.',
         'nav_home':'Басты бет', 'nav_admin':'Оқытушыға',
+        'studied':'оқылды', 'studied_title':'Оқылды', 'mark_done':'✓  Оқылды деп белгілеу',
+        'unmark_done':'✓  Оқылды · белгіні алу', 'in_text':'Мәтінде',
         'search_open':'Іздеу', 'search_ph':'Пән немесе материал іздеу…', 'search_empty':'Ештеңе табылмады',
         'course_word':'Пән', 'prev':'Алдыңғы', 'next':'Келесі',
         'f_course':'Пән', 'f_kind':'Түрі', 'f_format':'Формат', 'f_size':'Көлемі', 'f_lang':'Тілі',
@@ -295,15 +301,16 @@ def topnav() -> None:
 
 
 def row(key: str, number: int, title: str, *, kicker: str = '', sub: str = '', meta: str = '',
-        new: str = '', big: bool = False, button: str = '', button_key: str = '') -> bool:
+        new: str = '', big: bool = False, button: str = '', button_key: str = '', done: bool = False,
+        extra: str = '') -> bool:
     """One line of a modernist index list; returns True when its button is pressed."""
     with st.container(key='row_'+key):
         left, right = st.columns([5, 1.25], vertical_alignment='center')
         left.markdown(
-            f'<div class="row"><span class="row-n">{number:02d}</span><div class="row-body">'
+            f'<div class="row{" is-done" if done else ""}"><span class="row-n">{"✓" if done else f"{number:02d}"}</span><div class="row-body">'
             + (f'<span class="row-kicker">{esc(kicker)}</span>' if kicker else '')
             + f'<b class="row-title{" big" if big else ""}">{esc(title)}</b>'
-            + (f'<span class="row-sub">{esc(sub)}</span>' if sub else '')
+            + (f'<span class="row-sub">{esc(sub)}</span>' if sub else '') + extra
             + '</div><span class="row-meta">'
             + (f'<span class="tag-new">{esc(new)}</span>' if new else '') + f'{esc(meta)}</span></div>',
             unsafe_allow_html=True,
@@ -321,7 +328,8 @@ def material_row(item: dict, lang: str, prefix: str, number: int) -> None:
     if row(f'{prefix}_{key_of(item["id"])}', number, item['title'],
            kicker=f'{display_course(item["course"], lang)} — {kind}',
            meta=f'{item["extension"].lstrip(".").upper()} · {human_size(item["size"])}',
-           new=t['new'] if item.get('new') else '', button=t['open_item']+' →', button_key=f'item_{prefix}_{item["id"]}'):
+           new=t['new'] if item.get('new') else '', button=t['open_item']+' →', button_key=f'item_{prefix}_{item["id"]}',
+           done=is_done(item)):
         route('reader', course=item['course_id'], material=item['id'])
 
 
@@ -349,6 +357,35 @@ def welcome() -> None:
                         f'<b>{esc(title)}<span class="dot">.</span></b><p>{esc(sub)}</p></div>', unsafe_allow_html=True)
             if st.button(label+'  →', key='choose_'+code, type='primary', use_container_width=True):
                 route('home', lang=code)
+
+
+def done_ids() -> list[str]:
+    """Hashes of materials marked as studied. Loaded once from the cookie that fx.js keeps in sync."""
+    if 'done' not in st.session_state:
+        try:
+            raw = st.context.cookies.get('ss_done')
+        except Exception:
+            raw = None
+        saved = unquote(raw).split('|') if isinstance(raw, str) else []
+        st.session_state['done'] = [h for h in saved if re.fullmatch(r'[0-9a-f]{12}', h)][:280]
+    return st.session_state['done']
+
+
+def is_done(item: dict) -> bool:
+    return key_of(item['id']) in done_ids()
+
+
+def toggle_done(item: dict) -> None:
+    mark, current = key_of(item['id']), done_ids()
+    # 280 x 13 chars stays under the 4 KB cookie limit.
+    st.session_state['done'] = [h for h in current if h != mark] if mark in current else ([mark] + current)[:280]
+
+
+def progress_bar(done: int, total: int, label: str) -> str:
+    pct = round(100 * done / total) if total else 0
+    return (f'<div class="progress"><div class="progress-track" role="progressbar" aria-valuenow="{pct}" '
+            f'aria-valuemin="0" aria-valuemax="100"><i style="width:{pct}%"></i></div>'
+            f'<span>{done}/{total} {esc(label)}</span></div>')
 
 
 def recent_ids() -> list[str]:
@@ -398,8 +435,10 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
         own = [m for m in visible if m['course_id'] == course['id']]
         lect = sum(m['kind'] == 'lectures' for m in own)
         fresh_count = sum(bool(m.get('new')) for m in own)
+        studied = sum(is_done(m) for m in own)
         if row('course_'+course['id'], n, display_course(course, lang), big=True,
                sub=f'{lect} {t["lectures"]} · {len(own) - lect} {t["presentations"]}',
+               extra=progress_bar(studied, len(own), t['studied']) if studied else '',
                meta=f'{course.get("icon", "")}', new=f'+{fresh_count} {t["new"]}' if fresh_count else '',
                button=t['open']+' →', button_key=f'course_{lang}_{course["id"]}'):
             route('course', course=course['id'])
@@ -422,10 +461,13 @@ def course_page(config: dict, materials: list[dict], lang: str) -> None:
     fresh = sum(bool(m.get('new')) for m in own)
     facts = ''.join(f'<div><b>{len(items):02d}</b><span>{esc(title)}</span></div>' for title, items in groups)
     facts += f'<div class="fact-new"><b>{fresh:02d}</b><span>{esc(t["new"])}</span></div>' if fresh else ''
+    studied = sum(is_done(m) for m in own)
+    facts += f'<div><b>{studied:02d}<small>/{len(own):02d}</small></b><span>{esc(t["studied_title"])}</span></div>'
     st.markdown(
         f'<section class="course-hero"><div class="hero-meta"><span>{index+1:02d} / {len(courses):02d}</span>'
         f'<span>{esc(LANG_LABELS[lang])}</span><span>{esc(course.get("icon", ""))}</span><span>{len(own)} {esc(t["materials"])}</span></div>'
-        f'<h1>{esc(display_course(course, lang))}<span class="dot">.</span></h1><div class="stats">{facts}</div></section>',
+        f'<h1>{esc(display_course(course, lang))}<span class="dot">.</span></h1><div class="stats">{facts}</div>'
+        f'{progress_bar(studied, len(own), t["studied"]) if own else ""}</section>',
         unsafe_allow_html=True,
     )
     if not own:
@@ -548,6 +590,11 @@ def reader(materials: list[dict], lang: str) -> None:
         st.download_button(t['download'], filedata, file_name=item['filename'],
                            mime=mimetypes.guess_type(item['filename'])[0] or 'application/octet-stream',
                            type='primary', use_container_width=True, key='reader_download')
+        done = is_done(item)
+        if st.button(t['unmark_done'] if done else t['mark_done'], key='toggle_done',
+                     type='tertiary' if done else 'secondary', use_container_width=True):
+            toggle_done(item)
+            st.rerun()
         with st.container(key='pager'):
             if position > 0 and st.button('← '+siblings[position - 1]['title'], key='prev_item',
                                           help=t['prev'], use_container_width=True):
@@ -765,6 +812,45 @@ def files_done(course_id: str, done: list[str], failed: list[str], prefix: str) 
     st.rerun()
 
 
+def attention(config: dict, materials: list[dict]) -> list[str]:
+    """Plain-language problems a teacher can fix: empty sections and sections without lectures."""
+    issues = []
+    for course in config['courses']:
+        for lang in course_languages(course):
+            own = [m for m in materials if m['course_id'] == course['id'] and m['lang'] == lang]
+            name = f'{display_course(course, lang)} · {lang.upper()}'
+            if not own:
+                issues.append(f'{name} — нет материалов, студенты видят пустой раздел')
+            elif not any(m['kind'] == 'lectures' for m in own):
+                issues.append(f'{name} — {len(own)} файлов, но ни одной лекции (проверь тип во вкладке «Мои дисциплины»)')
+        if not course_languages(course):
+            issues.append(f'{course.get("title_ru") or course.get("title_kz") or course["id"]} — не выбран язык, предмет скрыт')
+    return issues
+
+
+def dashboard(config: dict, materials: list[dict]) -> None:
+    lectures = sum(m['kind'] == 'lectures' for m in materials)
+    fresh = sorted((m for m in materials if m.get('new')), key=lambda m: m['new'], reverse=True)
+    by_lang = Counter(m['lang'] for m in materials)
+    stats = [(len(config['courses']), 'Дисциплины'), (lectures, 'Лекции'), (len(materials) - lectures, 'Презентации'),
+             (len(fresh), 'Новые за 7 дней')]
+    st.markdown('<div class="stats admin-stats">' + ''.join(f'<div><b data-count="{v}">{v:02d}</b><span>{esc(k)}</span></div>' for v, k in stats)
+                + f'</div><div class="lang-split"><span>RU {by_lang["ru"]}</span><i style="flex:{max(by_lang["ru"], 0.001)}"></i>'
+                  f'<i class="kz" style="flex:{max(by_lang["kz"], 0.001)}"></i><span>KZ {by_lang["kz"]}</span></div>',
+                unsafe_allow_html=True)
+    issues = attention(config, materials)
+    recent = [f'{m["title"]} — {display_course(m["course"], m["lang"])} · {m["lang"].upper()} · {m["new"]}' for m in fresh[:6]]
+    left, right = st.columns(2, gap='large')
+    left.markdown(
+        f'<div class="apanel"><span class="eyebrow">01</span><h4>Требует внимания</h4><ul>'
+        + (''.join(f'<li class="warn">{esc(i)}</li>' for i in issues) or '<li class="ok">Всё в порядке: у каждого раздела есть лекции.</li>')
+        + '</ul></div>', unsafe_allow_html=True)
+    right.markdown(
+        f'<div class="apanel"><span class="eyebrow">02</span><h4>Загружено за 7 дней</h4><ul>'
+        + (''.join(f'<li>{esc(r)}</li>' for r in recent) or '<li class="muted">Пока ничего нового. Метки появляются, если в Secrets есть GITHUB_TOKEN.</li>')
+        + '</ul></div>', unsafe_allow_html=True)
+
+
 def admin(config: dict, materials: list[dict]) -> None:
     header('Твоя учебная платформа.', 'Создавай дисциплины, загружай файлы и управляй цифровой библиотекой.', '⚙')
     admin_password = secret('ADMIN_PASSWORD')
@@ -793,11 +879,10 @@ def admin(config: dict, materials: list[dict]) -> None:
                 left = LOGIN_MAX_FAILS - len(login_failures())
                 st.error('Неверный пароль.' + (f' Осталось попыток: {left}.' if left > 0 else ' Вход временно заблокирован на 5 минут.'))
         return
-    top, out = st.columns([4, 1])
-    with top:
-        st.caption(f'🟢 Вход выполнен · Репозиторий: {repo} · Ветка: {branch}')
-    with out:
-        if st.button('Выйти', use_container_width=True, key='logout'):
+    with st.container(key='adminbar'):
+        bar, out = st.columns([5, 1], vertical_alignment='center')
+        bar.markdown(f'<div class="adminbar"><i></i>Вход выполнен · {esc(repo)} · {esc(branch)}</div>', unsafe_allow_html=True)
+        if out.button('Выйти →', use_container_width=True, key='logout', type='tertiary'):
             st.session_state['admin_ok'] = False
             route('welcome', lang='')
     flash()
@@ -805,11 +890,8 @@ def admin(config: dict, materials: list[dict]) -> None:
         st.error('Добавь GITHUB_TOKEN в секреты Streamlit Cloud: без токена создавать дисциплины и загружать файлы нельзя.')
         return
     github = GithubStore(repo, branch, token)
-    stats = st.columns(3, gap='medium')
-    for col, label, number, symbol in zip(stats, ['Дисциплины', 'Лекции', 'Презентации'], [len(config['courses']), sum(m['kind'] == 'lectures' for m in materials), sum(m['kind'] == 'presentations' for m in materials)], ['▦','▤','▣']):
-        with col:
-            st.markdown(f'<div class="admin-stat"><div class="admin-stat-head"><span>{esc(label)}</span><i>{symbol}</i></div><strong data-count="{number}">{number:02d}</strong><div class="admin-stat-foot">STUDYSPACE · LIVE</div></div>',unsafe_allow_html=True)
-    st.markdown('<div class="admin-section-heading"><span class="eyebrow">TOOLS / УПРАВЛЕНИЕ</span><h3>Контент и дисциплины</h3><p>Все изменения сохраняются непосредственно в твоём репозитории GitHub.</p></div>', unsafe_allow_html=True)
+    dashboard(config, materials)
+    st.markdown('<div class="admin-section-heading"><span class="eyebrow">03</span><h3>Управление</h3><p>Все изменения сохраняются прямо в репозитории GitHub; любое действие можно откатить по истории коммитов.</p></div>', unsafe_allow_html=True)
     create_tab, upload_tab, manage_tab = st.tabs(['✳   Создать дисциплину', '↥   Загрузить материалы', '▦   Мои дисциплины'])
     with create_tab:
         st.markdown('#### ✦ Новая дисциплина')
@@ -1025,11 +1107,16 @@ def admin(config: dict, materials: list[dict]) -> None:
         st.caption('Открыть GitHub: '+f'https://github.com/{repo}/tree/{branch}/materials/uploads')
 
 
+@st.cache_resource
+def fulltext_index() -> FullText:
+    return FullText(BASE / 'static' / 'fulltext.json')
+
+
 def search_index(config: dict, materials: list[dict]) -> None:
     """Hidden JSON for the client-side search palette in fx.js: only what students can already open."""
     lang = st.session_state.get('lang', '')
     t = I18N.get(lang, I18N['ru'])
-    entries = []
+    entries, by_url = [], {}
     for code in LANG_LABELS:
         tl = I18N[code]
         courses = [c for c in config['courses'] if code in course_languages(c)]
@@ -1039,7 +1126,14 @@ def search_index(config: dict, materials: list[dict]) -> None:
         entries += [{'k': tl['lectures_one'] if m['kind'] == 'lectures' else tl['presentations_one'], 't': m['title'],
                      's': display_course(m['course'], code), 'l': code, 'u': '?'+urlencode({'lang': code, 'material': m['id']})}
                     for m in materials if m['lang'] == code and m['course_id'] in ids]
+        by_url.update({'?'+urlencode({'lang': code, 'material': m['id']}): m for m in materials if m['lang'] == code})
+    repo, branch, _ = settings()
+    listed = {e['u'] for e in entries}  # only what students can open, same as the palette
+    docs = [{'u': u, 'path': m['path'], 'sha': m['sha'], 'extension': m['extension']}
+            for u, m in by_url.items() if u in listed]
+    fulltext_index().refresh(docs, lambda path, sha: GithubStore(repo, branch).raw_bytes(path, sha))
     st.markdown(f'<div id="ss-index" hidden data-lang="{esc(lang)}" data-ph="{esc(t["search_ph"])}" '
+                f'data-ft="app/static/fulltext.json" data-in-text="{esc(t["in_text"])}" '
                 f'data-empty="{esc(t["search_empty"])}" data-items="{esc(json.dumps(entries, ensure_ascii=False))}"></div>',
                 unsafe_allow_html=True)
 
@@ -1093,6 +1187,8 @@ def main() -> None:
         welcome()
     footer()
     search_index(config, materials)
+    # fx.js copies this into the ss_done cookie, so marks survive the next visit.
+    st.markdown(f'<div id="ss-done" hidden data-done="{"|".join(done_ids())}"></div>', unsafe_allow_html=True)
 
 
 if __name__ == '__main__':

@@ -8,3 +8,5 @@ font = "sans serif"
 
 [server]
 maxUploadSize = 40
+# Serves ./static at app/static/ (the full-text search index built by fulltext.py).
+enableStaticServing = true

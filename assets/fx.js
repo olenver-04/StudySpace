@@ -78,13 +78,39 @@
       document.documentElement.classList.toggle('ss-busy', !!document.querySelector('[data-stale="true"]'));
     }, 120);
 
+    // "Studied" marks: the server renders the current list into #ss-done; keep the cookie equal to it.
+    var lastDone = null;
+    setInterval(function () {
+      var el = document.getElementById('ss-done');
+      if (!el) return;
+      var value = el.getAttribute('data-done') || '';
+      if (value === lastDone) return;
+      lastDone = value;
+      document.cookie = 'ss_done=' + encodeURIComponent(value) + '; path=/; max-age=63072000; SameSite=Lax';
+    }, 400);
+
     // ---------- Search palette: "/" or Ctrl/Cmd+K anywhere, or the search button in the top bar ----------
     var pal = null, results = [], active = 0;
+    var fullText = null, fullTextNorm = {}, fullTextState = 'idle';
+    function loadFullText(url) {
+      // The server builds this index in the background; until it exists, titles alone are searched.
+      if (fullTextState !== 'idle' || !url) return;
+      fullTextState = 'loading';
+      fetch(url + '?v=' + Date.now()).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+        fullText = data && typeof data === 'object' ? data : null;
+        fullTextState = fullText ? 'ready' : 'idle';
+        if (fullText) Object.keys(fullText).forEach(function (u) { fullTextNorm[u] = norm(fullText[u]); });
+        if (pal && pal.classList.contains('open')) render();
+      }).catch(function () { fullTextState = 'idle'; });
+    }
     function norm(x) { return (x || '').toLowerCase().replace(/ё/g, 'е'); }
     function indexData() {
       var el = document.getElementById('ss-index');
       if (!el) return null;
-      try { return {lang: el.dataset.lang, ph: el.dataset.ph, empty: el.dataset.empty, items: JSON.parse(el.dataset.items || '[]')}; }
+      try {
+        return {lang: el.dataset.lang, ph: el.dataset.ph, empty: el.dataset.empty, ft: el.dataset.ft,
+                inText: el.dataset.inText, items: JSON.parse(el.dataset.items || '[]')};
+      }
       catch (e) { return null; }
     }
     function build() {
@@ -116,6 +142,7 @@
       input.placeholder = data.ph;
       input.value = '';
       pal.classList.add('open');
+      loadFullText(data.ft);
       render();
       setTimeout(function () { input.focus(); }, 0);
     }
@@ -131,6 +158,18 @@
         var score = (it.l === data.lang ? 0 : 100) + (q && norm(it.t).indexOf(q) === 0 ? 0 : 10) + (!q && !it.c ? 1 : 0);
         scored.push([score, order, it]);
       });
+      // Then files whose text (not title) contains every word, with a snippet around the first hit.
+      if (fullText && q.length >= 3) {
+        var seen = {};
+        scored.forEach(function (x) { seen[x[2].u] = 1; });
+        data.items.forEach(function (it, order) {
+          var body = fullTextNorm[it.u];
+          if (seen[it.u] || !body || !words.every(function (w) { return body.indexOf(w) >= 0; })) return;
+          var at = body.indexOf(words[0]), text = fullText[it.u];
+          var from = Math.max(0, at - 50), snippet = (from ? '…' : '') + text.slice(from, at + 110).trim() + '…';
+          scored.push([(it.l === data.lang ? 50 : 150), order, {t: it.t, s: it.s, k: data.inText + ' · ' + it.k, l: it.l, u: it.u, snip: snippet}]);
+        });
+      }
       scored.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
       results = scored.slice(0, 9).map(function (x) { return x[2]; });
       active = 0;
@@ -154,6 +193,12 @@
         var lang = document.createElement('i');
         lang.textContent = it.l.toUpperCase();
         li.appendChild(kick); li.appendChild(title); li.appendChild(lang);
+        if (it.snip) {
+          var snip = document.createElement('span');
+          snip.className = 'snip';
+          highlight(snip, it.snip, words);
+          li.appendChild(snip);
+        }
         li.addEventListener('mousemove', function () { if (active !== i) { active = i; paint(); } });
         li.addEventListener('click', function () { go(it); });
         ul.appendChild(li);

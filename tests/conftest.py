@@ -9,6 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import fulltext  # noqa: E402
 import github_store  # noqa: E402
 import requests  # noqa: E402
 import streamlit as st  # noqa: E402
@@ -62,6 +63,8 @@ def gh(monkeypatch):
                         lambda self, path, data, message, replace=False: rec.calls.append(('write', path, len(data))))
     monkeypatch.setattr(github_store.GithubStore, 'delete_file', lambda self, path, sha, message: rec.calls.append(('delete', path)))
     monkeypatch.setattr(requests, 'post', post)
+    # The background full-text build would write into the real static/ folder; its own tests call build() directly.
+    monkeypatch.setattr(fulltext.FullText, 'refresh', lambda self, docs, fetch: None)
     st.cache_data.clear()
     st.cache_resource.clear()
     return rec
