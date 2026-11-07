@@ -606,3 +606,63 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 /* Streamlit pulls markdown blocks up by 1rem; without this the card button overlaps the meta line. */
 .card {padding-bottom: 28px}
 [class*="st-key-card_"] [data-testid="stButton"] button > div {justify-content: flex-start !important}
+
+/* =====================================================================
+   5.5: slide viewer, per-course accent colour.
+   --accent is set per course by app.py (use_accent / row style); red is the fallback.
+   ===================================================================== */
+
+/* ---------- Course accent ---------- */
+.course-hero .hero-meta {border-top: 3px solid var(--accent, var(--rule))}
+.course-hero h1 .dot {color: var(--accent, var(--red))}
+.progress-track i {background: var(--accent, var(--red))}
+[class*="st-key-card_"]:hover .card-cover::after {box-shadow: inset 0 0 0 3px var(--accent, var(--red))}
+[class*="st-key-card_"]:hover .card-title, [class*="st-key-card_"]:hover [data-testid="stButton"] button p {color: var(--accent, var(--red))}
+.row[style] .row-n {color: var(--accent); font-weight: 500}
+.row[style] .row-thumb {border-left: 3px solid var(--accent)}
+[class*="st-key-row_"]:hover .row[style] .row-title {color: var(--accent)}
+.facts > div:first-child dd {color: var(--accent, var(--ink))}
+
+/* ---------- Slide viewer ---------- */
+.deck {position: relative; outline: none}
+.deck-stage {position: relative; background: #0B0B0A; border: 1px solid var(--rule); aspect-ratio: 16 / 9; display: grid; place-items: center; overflow: hidden; touch-action: pan-y; user-select: none}
+.deck-img {width: 100%; height: 100%; object-fit: contain; display: block; cursor: pointer; animation: slidein .35s cubic-bezier(.2,.7,.2,1)}
+@keyframes slidein {from {opacity: .35}}
+.deck-nav {position: absolute; top: 50%; transform: translateY(-50%); width: 46px; height: 46px; display: grid; place-items: center;
+  border: 1px solid rgba(255,255,255,.35); background: rgba(11,11,10,.55); color: #fff; font: 600 18px var(--display); cursor: pointer;
+  opacity: 0; transition: opacity .2s ease, background .15s ease}
+.deck-prev {left: 12px}
+.deck-next {right: 12px}
+.deck-stage:hover .deck-nav, .deck-nav:focus-visible {opacity: 1}
+.deck-nav:hover {background: var(--accent, var(--red)); border-color: var(--accent, var(--red))}
+.deck-bar {display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--rule-soft)}
+.deck-count {font: 12px var(--mono); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums}
+.deck-count b {font: 700 22px var(--display); letter-spacing: -.04em; color: var(--ink)}
+.deck-progress {flex: 1; height: 3px; background: var(--rule-soft); position: relative}
+.deck-progress i {position: absolute; inset: 0 auto 0 0; background: var(--accent, var(--red)); transition: width .3s cubic-bezier(.2,.7,.2,1)}
+.deck-hint {font: 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap}
+.deck-full {border: 1px solid var(--ink); background: transparent; color: var(--ink); font: 600 12px var(--text); padding: 7px 12px; cursor: pointer; white-space: nowrap}
+.deck-full:hover {background: var(--ink); color: var(--paper)}
+.deck-strip {display: flex; gap: 8px; overflow-x: auto; padding: 12px 0 4px; scrollbar-width: thin}
+.deck-thumb {position: relative; flex: none; width: 112px; aspect-ratio: 16 / 9; padding: 0; border: 1px solid var(--rule-soft); background: var(--paper-2); cursor: pointer; overflow: hidden; opacity: .62; transition: opacity .2s ease, border-color .2s ease}
+.deck-thumb img {width: 100%; height: 100%; object-fit: cover; display: block}
+.deck-thumb span {position: absolute; left: 0; bottom: 0; padding: 1px 4px; font: 10px var(--mono); background: var(--paper); color: var(--ink)}
+.deck-thumb:hover {opacity: 1}
+.deck-thumb.on {opacity: 1; border: 2px solid var(--accent, var(--red))}
+/* Fullscreen: the slide fills the screen, controls stay reachable. */
+.deck:fullscreen, .deck.pseudo-full {background: #0B0B0A; display: flex; flex-direction: column; padding: 12px; color: #F1EEE8}
+.deck.pseudo-full {position: fixed; inset: 0; z-index: 1000004}
+.deck:fullscreen .deck-stage, .deck.pseudo-full .deck-stage {flex: 1; aspect-ratio: auto; border: 0}
+.deck:fullscreen .deck-bar, .deck.pseudo-full .deck-bar {border-color: #34322F}
+.deck:fullscreen .deck-count b, .deck.pseudo-full .deck-count b, .deck:fullscreen .deck-full, .deck.pseudo-full .deck-full {color: #F1EEE8; border-color: #F1EEE8}
+.deck:fullscreen .deck-strip, .deck.pseudo-full .deck-strip {display: none}
+.deck:fullscreen .deck-nav, .deck.pseudo-full .deck-nav {opacity: .7}
+
+@media (max-width: 640px) {
+  .deck-hint {display: none}
+  .deck-nav {opacity: .8; width: 38px; height: 38px}
+  .deck-thumb {width: 88px}
+}
+@media (hover: none) {
+  .deck-nav {opacity: .8}
+}

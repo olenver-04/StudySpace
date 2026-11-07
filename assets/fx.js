@@ -51,6 +51,65 @@
       document.cookie = 'ss_theme=' + (dark ? 'light' : 'dark') + '; path=/; max-age=63072000; SameSite=Lax';
     });
 
+    // ---------- Slide viewer (markup comes from deck() in app.py) ----------
+    function current(deck) { return +(deck.dataset.i || deck.dataset.start || 1); }
+    function show(deck, i) {
+      var n = +deck.dataset.total, base = deck.dataset.base;
+      i = Math.max(1, Math.min(n, i));
+      if (i === current(deck) && deck.dataset.i) return;
+      deck.dataset.i = i;
+      deck.querySelector('.deck-img').src = base + i + '.webp';
+      deck.querySelector('.deck-count b').textContent = String(i).padStart(2, '0');
+      deck.querySelector('.deck-progress i').style.width = (100 * i / n) + '%';
+      deck.querySelectorAll('.deck-thumb').forEach(function (t) {
+        var on = +t.dataset.i === i;
+        t.classList.toggle('on', on);
+        if (on) {  // keep the active preview visible without moving the page
+          var strip = t.parentElement;
+          strip.scrollTo({left: t.offsetLeft - strip.clientWidth / 2 + t.clientWidth / 2, behavior: reduce ? 'auto' : 'smooth'});
+        }
+      });
+      if (i < n) { var next = new Image(); next.src = base + (i + 1) + '.webp'; }  // preload
+    }
+    function fullscreen(deck) {
+      if (document.fullscreenElement) { document.exitFullscreen(); return; }
+      if (deck.requestFullscreen) deck.requestFullscreen().catch(function () { deck.classList.toggle('pseudo-full'); });
+      else deck.classList.toggle('pseudo-full');  // iPhone Safari has no element fullscreen
+    }
+    document.addEventListener('click', function (e) {
+      var deck = e.target.closest && e.target.closest('.deck');
+      if (!deck) return;
+      var thumb = e.target.closest('.deck-thumb');
+      if (thumb) show(deck, +thumb.dataset.i);
+      else if (e.target.closest('.deck-prev')) show(deck, current(deck) - 1);
+      else if (e.target.closest('.deck-next')) show(deck, current(deck) + 1);
+      else if (e.target.closest('.deck-full')) fullscreen(deck);
+      else if (e.target.closest('.deck-img')) {  // click on the slide: left third back, rest forward
+        var r = e.target.getBoundingClientRect();
+        show(deck, current(deck) + (e.clientX - r.left < r.width / 3 ? -1 : 1));
+      }
+    });
+    document.addEventListener('keydown', function (e) {
+      var deck = document.querySelector('.deck'), a = document.activeElement;
+      if (!deck || (pal && pal.classList.contains('open')) || (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') { show(deck, current(deck) + 1); e.preventDefault(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { show(deck, current(deck) - 1); e.preventDefault(); }
+      else if (e.key === 'Home') { show(deck, 1); e.preventDefault(); }
+      else if (e.key === 'End') { show(deck, +deck.dataset.total); e.preventDefault(); }
+      else if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey) fullscreen(deck);
+      else if (e.key === 'Escape') deck.classList.remove('pseudo-full');
+    });
+    var swipeX = null;
+    document.addEventListener('pointerdown', function (e) {
+      swipeX = e.target.closest && e.target.closest('.deck-stage') ? e.clientX : null;
+    }, {passive: true});
+    document.addEventListener('pointerup', function (e) {
+      if (swipeX === null) return;
+      var dx = e.clientX - swipeX, deck = e.target.closest && e.target.closest('.deck');
+      swipeX = null;
+      if (deck && Math.abs(dx) > 50) show(deck, current(deck) + (dx < 0 ? 1 : -1));
+    }, {passive: true});
+
     // A click anywhere on an index row or a language panel acts like its button.
     document.addEventListener('click', function (e) {
       if (!e.target.closest) return;
@@ -146,7 +205,7 @@
       if (!el) return null;
       try {
         return {lang: el.dataset.lang, ph: el.dataset.ph, empty: el.dataset.empty, ft: el.dataset.ft,
-                inText: el.dataset.inText, items: JSON.parse(el.dataset.items || '[]')};
+                inText: el.dataset.inText, slide: el.dataset.slide || 'slide', items: JSON.parse(el.dataset.items || '[]')};
       }
       catch (e) { return null; }
     }
@@ -203,8 +262,13 @@
           var body = fullTextNorm[it.u];
           if (seen[it.u] || !body || !words.every(function (w) { return body.indexOf(w) >= 0; })) return;
           var at = body.indexOf(words[0]), text = fullText[it.u];
-          var from = Math.max(0, at - 50), snippet = (from ? '…' : '') + text.slice(from, at + 110).trim() + '…';
-          scored.push([(it.l === data.lang ? 50 : 150), order, {t: it.t, s: it.s, k: data.inText + ' · ' + it.k, l: it.l, u: it.u, snip: snippet}]);
+          var from = Math.max(0, at - 50), snippet = (from ? '…' : '') + text.slice(from, at + 110).replace(/\f/g, ' ').trim() + '…';
+          // Pages are separated by \f in the index: the number of breaks before the hit is the slide.
+          var page = text.slice(0, at).split('\f').length, multi = text.indexOf('\f') >= 0;
+          scored.push([(it.l === data.lang ? 50 : 150), order, {
+            t: it.t, s: it.s, l: it.l, snip: snippet,
+            k: data.inText + ' · ' + (multi ? data.slide + ' ' + page : it.k),
+            u: it.u + (multi ? '&slide=' + page : '')}]);
         });
       }
       scored.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });

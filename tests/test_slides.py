@@ -27,7 +27,7 @@ def test_render_cover_writes_webp_and_counts_pages(tmp_path):
     buf = io.BytesIO()
     writer.write(buf)
     target = tmp_path / 'thumbs' / 'abc.webp'
-    assert render_cover(buf.getvalue(), target) == 3
+    assert render_cover(buf.getvalue(), target) == (3, None)  # a white page has no accent colour
     assert target.read_bytes()[:4] == b'RIFF' and target.stat().st_size > 0
 
 

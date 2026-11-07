@@ -11,6 +11,7 @@ import html
 import hmac
 import json
 import mimetypes
+import os
 import re
 import time
 from collections import Counter
@@ -21,7 +22,7 @@ import requests
 import segno
 import streamlit as st
 
-from fulltext import FullText
+from fulltext import FullText, render_pages
 from github_store import GithubError, GithubStore
 from portal_logic import (
     ALLOWED_EXTENSIONS, course_languages, display_course, human_size, parse_materials,
@@ -30,6 +31,8 @@ from portal_logic import (
 
 st.set_page_config(page_title='StudySpace • Education Hub', page_icon='🟥', layout='wide', initial_sidebar_state='collapsed')
 BASE = Path(__file__).resolve().parent
+# Generated covers, slides and the search index; served at app/static/ (enableStaticServing).
+STATIC = Path(os.environ.get('STUDYSPACE_STATIC') or BASE / 'static')
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 LANG_LABELS = {'ru': '🇷🇺 Русский', 'kz': '🇰🇿 Қазақша'}
 TEACHING_LANGUAGES = {'ru': '🇷🇺 Только русский', 'kz': '🇰🇿 Тек қазақша', 'both': '🌐 На двух языках'}
@@ -63,6 +66,7 @@ I18N = {
         'nav_home':'Главная', 'nav_admin':'Преподавателю',
         'studied':'изучено', 'studied_title':'Изучено', 'mark_done':'✓  Отметить как изученное',
         'unmark_done':'✓  Изучено · снять отметку', 'in_text':'В тексте',
+        'slides_loading':'Готовим слайды…', 'fullscreen':'На весь экран', 'slide_word':'слайд', 'deck_hint':'← → или свайп',
         'new_week':'новых за неделю', 'f_slides':'Слайдов', 'strip':'Лента слайдов',
         'theme':'Светлая / тёмная тема', 'menu':'Меню', 'to_top':'Наверх',
         'search_open':'Поиск', 'search_ph':'Найти предмет или материал…', 'search_empty':'Ничего не найдено',
@@ -103,6 +107,7 @@ I18N = {
         'nav_home':'Басты бет', 'nav_admin':'Оқытушыға',
         'studied':'оқылды', 'studied_title':'Оқылды', 'mark_done':'✓  Оқылды деп белгілеу',
         'unmark_done':'✓  Оқылды · белгіні алу', 'in_text':'Мәтінде',
+        'slides_loading':'Слайдтар дайындалуда…', 'fullscreen':'Толық экран', 'slide_word':'слайд', 'deck_hint':'← → немесе свайп',
         'new_week':'аптадағы жаңа', 'f_slides':'Слайд', 'strip':'Слайдтар таспасы',
         'theme':'Ашық / қараңғы режим', 'menu':'Мәзір', 'to_top':'Жоғары',
         'search_open':'Іздеу', 'search_ph':'Пән немесе материал іздеу…', 'search_empty':'Ештеңе табылмады',
@@ -295,7 +300,20 @@ def slides(item: dict) -> int:
 def cover_url(item: dict) -> str:
     """Static URL of the rendered first slide, or '' while it is not ready (or not a PDF)."""
     name = f'{item["sha"]}.webp'
-    return f'app/static/thumbs/{name}' if (BASE / 'static' / 'thumbs' / name).exists() else ''
+    return f'app/static/thumbs/{name}' if (STATIC / 'thumbs' / name).exists() else ''
+
+
+def accent(items: list[dict]) -> str:
+    """Most common cover colour of these materials ('' until covers are analysed)."""
+    colors = Counter(c for m in items if (c := fulltext_index().colors.get(m.get('sha', ''))))
+    color = colors.most_common(1)[0][0] if colors else ''
+    return color if re.fullmatch(r'#[0-9a-f]{6}', color) else ''
+
+
+def use_accent(color: str) -> None:
+    """Colours course-specific details (progress, numbers, hover frames, viewer) for this page."""
+    if color:
+        st.markdown(f'<style>:root {{--accent: {color}}}</style>', unsafe_allow_html=True)
 
 
 def material_meta(item: dict, lang: str) -> str:
@@ -382,12 +400,13 @@ def topnav() -> None:
 
 def row(key: str, number: int, title: str, *, kicker: str = '', sub: str = '', meta: str = '',
         new: str = '', big: bool = False, button: str = '', button_key: str = '', done: bool = False,
-        extra: str = '', thumb: str = '') -> bool:
+        extra: str = '', thumb: str = '', color: str = '') -> bool:
     """One line of a modernist index list; returns True when its button is pressed."""
     with st.container(key='row_'+key):
         left, right = st.columns([5, 1.25], vertical_alignment='center')
         left.markdown(
-            f'<div class="row{" is-done" if done else ""}{" has-thumb" if thumb else ""}"><span class="row-n">{"✓" if done else f"{number:02d}"}</span>'
+            f'<div class="row{" is-done" if done else ""}{" has-thumb" if thumb else ""}"'
+            + (f' style="--accent:{color}"' if color else '') + f'><span class="row-n">{"✓" if done else f"{number:02d}"}</span>'
             + (f'<img class="row-thumb" src="{esc(thumb)}" alt="" loading="lazy">' if thumb else '') + '<div class="row-body">'
             + (f'<span class="row-kicker">{esc(kicker)}</span>' if kicker else '')
             + f'<b class="row-title{" big" if big else ""}">{esc(title)}</b>'
@@ -570,7 +589,7 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
         sub = (f'{lect} {t["lectures"]} · {len(own) - lect} {t["presentations"]}' if mixed()
                else f'{len(own)} {plural(len(own), lang, "pres")}' + (f' · {n_slides} {plural(n_slides, lang, "slides")}' if n_slides else ''))
         first_cover = next((cover_url(m) for m in own if cover_url(m)), '')
-        if row('course_'+course['id'], n, display_course(course, lang), big=True, sub=sub, thumb=first_cover,
+        if row('course_'+course['id'], n, display_course(course, lang), big=True, sub=sub, thumb=first_cover, color=accent(own),
                extra=progress_bar(studied, len(own), t['studied']) if studied else '',
                meta=f'{course.get("icon", "")}', new=f'+{fresh_count} {t["new"]}' if fresh_count else '',
                button=t['open']+' →', button_key=f'course_{lang}_{course["id"]}'):
@@ -599,6 +618,7 @@ def course_page(config: dict, materials: list[dict], lang: str) -> None:
     facts += f'<div class="fact-new"><b>{fresh:02d}</b><span>{esc(t["new"])}</span></div>' if fresh else ''
     studied = sum(is_done(m) for m in own)
     facts += f'<div><b>{studied:02d}<small>/{len(own):02d}</small></b><span>{esc(t["studied_title"])}</span></div>'
+    use_accent(accent(own))
     st.markdown(
         f'<section class="course-hero"><div class="hero-meta"><span>{index+1:02d} / {len(courses):02d}</span>'
         f'<span>{esc(LANG_LABELS[lang])}</span><span>{esc(course.get("icon", ""))}</span><span>{len(own)} {esc(t["materials"])}</span></div>'
@@ -705,12 +725,21 @@ def reader(materials: list[dict], lang: str) -> None:
         st.error(str(exc))
         return
     suffix = item['extension']
+    use_accent(accent(siblings))
     with view:
         if suffix == '.pdf':
             try:
-                st.pdf(filedata, height=760)
-            except Exception:
-                st.info(t['no_preview'])
+                with st.spinner(t['slides_loading']):
+                    count = render_pages(filedata, STATIC / 'slides' / item['sha'])
+            except Exception:  # damaged or unusual PDF: the browser's own viewer may still cope
+                count = 0
+            if count:
+                deck(item, count, t)
+            else:
+                try:
+                    st.pdf(filedata, height=760)
+                except Exception:
+                    st.info(t['no_preview'])
         elif suffix in ('.md', '.txt'):
             with st.container(key='textdoc'):
                 text = filedata.decode('utf-8-sig', errors='replace')
@@ -746,6 +775,30 @@ def reader(materials: list[dict], lang: str) -> None:
                                                           help=t['next'], use_container_width=True):
                 route('reader', course=item['course_id'], material=siblings[position + 1]['id'])
         share(item, t)
+
+
+def deck(item: dict, count: int, t: dict) -> None:
+    """Slide viewer; fx.js adds arrows, swipe, filmstrip clicks and fullscreen. ?slide=N opens slide N."""
+    try:
+        start = min(max(int(st.query_params.get('slide', 1)), 1), count)
+    except ValueError:
+        start = 1
+    base = f'app/static/slides/{item["sha"]}/'
+    strip = ''.join(
+        f'<button class="deck-thumb{" on" if n == start else ""}" type="button" data-i="{n}" aria-label="{esc(t["slide_word"])} {n}">'
+        f'<img src="{base}t{n}.webp" alt="" loading="lazy"><span>{n:02d}</span></button>' for n in range(1, count + 1))
+    st.markdown(
+        f'<div class="deck" data-total="{count}" data-start="{start}" data-base="{base}">'
+        f'<div class="deck-stage"><img class="deck-img" src="{base}{start}.webp" alt="{esc(item["title"])}">'
+        f'<button class="deck-nav deck-prev" type="button" aria-label="{esc(t["prev"])}">←</button>'
+        f'<button class="deck-nav deck-next" type="button" aria-label="{esc(t["next"])}">→</button></div>'
+        f'<div class="deck-bar"><span class="deck-count"><b>{start:02d}</b> / {count:02d}</span>'
+        f'<div class="deck-progress"><i style="width:{100 * start / count:.2f}%"></i></div>'
+        f'<span class="deck-hint">{esc(t["deck_hint"])}</span>'
+        f'<button class="deck-full" type="button">⛶ {esc(t["fullscreen"])}</button></div>'
+        f'<div class="deck-strip">{strip}</div></div>',
+        unsafe_allow_html=True,
+    )
 
 
 def site_url(**params: str) -> str:
@@ -1257,7 +1310,7 @@ def admin(config: dict, materials: list[dict]) -> None:
 
 @st.cache_resource
 def fulltext_index() -> FullText:
-    return FullText(BASE / 'static' / 'fulltext.json')
+    return FullText(STATIC / 'fulltext.json')
 
 
 def start_index(config: dict, materials: list[dict]) -> None:
@@ -1286,6 +1339,7 @@ def search_index(config: dict, materials: list[dict]) -> None:
                     for m in materials if m['lang'] == code and m['course_id'] in ids]
     st.markdown(f'<div id="ss-index" hidden data-lang="{esc(lang)}" data-ph="{esc(t["search_ph"])}" '
                 f'data-ft="app/static/fulltext.json" data-in-text="{esc(t["in_text"])}" data-top="{esc(t["to_top"])}" '
+                f'data-slide="{esc(t["slide_word"])}" '
                 f'data-empty="{esc(t["search_empty"])}" data-items="{esc(json.dumps(entries, ensure_ascii=False))}"></div>',
                 unsafe_allow_html=True)
 

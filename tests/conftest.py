@@ -27,7 +27,19 @@ FILES = [
     'java/ru/lectures/intro.md', 'java/kz/lectures/hidden.pdf',  # java has no kz section: must stay hidden
 ]
 TREE = [{'path': U + f, 'type': 'blob', 'sha': f'sha{n}', 'size': 2048} for n, f in enumerate(FILES)]
-BYTES = {'.pdf': b'%PDF-1.4\n%%EOF', '.html': b'<p>html lecture</p>', '.txt': b'plain text', '.md': b'# md', '.pptx': b'PK'}
+
+
+def blank_pdf(pages: int = 3) -> bytes:
+    import io
+    from pypdf import PdfWriter
+    writer, buf = PdfWriter(), io.BytesIO()
+    for _ in range(pages):
+        writer.add_blank_page(width=1440, height=810)
+    writer.write(buf)
+    return buf.getvalue()
+
+
+BYTES = {'.pdf': blank_pdf(), '.html': b'<p>html lecture</p>', '.txt': b'plain text', '.md': b'# md', '.pptx': b'PK'}
 
 
 class Recorder:
@@ -38,8 +50,10 @@ class Recorder:
 
 
 @pytest.fixture
-def gh(monkeypatch):
+def gh(monkeypatch, tmp_path):
     rec = Recorder()
+    # Covers, slides and the search index go to a temp folder, never into the real static/.
+    monkeypatch.setenv('STUDYSPACE_STATIC', str(tmp_path / 'static'))
 
     def recent_files(self, since, limit=30):
         if isinstance(rec.recent, Exception):
