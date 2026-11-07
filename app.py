@@ -59,6 +59,11 @@ I18N = {
         'offline':'Материалы временно недоступны. Обнови страницу немного позже.',
         'office_hint':'Если файл не отобразился, скачай его кнопкой ниже.',
         'nav_home':'Главная', 'nav_admin':'Преподавателю',
+        'search_open':'Поиск', 'search_ph':'Найти предмет или материал…', 'search_empty':'Ничего не найдено',
+        'course_word':'Предмет', 'prev':'Предыдущий', 'next':'Следующий',
+        'f_course':'Предмет', 'f_kind':'Тип', 'f_format':'Формат', 'f_size':'Размер', 'f_lang':'Язык',
+        'f_sections':'Разделы', 'f_langs':'Языки', 'f_formats':'Форматы', 'f_keys':'Поиск',
+        'f_keys_hint':'Нажми / или Ctrl K в любом месте сайта', 'f_made':'Сделано для учёбы',
         'poster':'Плакат A4 с QR-кодом', 'poster_download':'↓ Скачать плакат (HTML)', 'print':'Печать / PDF',
         'poster_scan':'Все материалы — по QR-коду',
         'poster_hint':'Наведи камеру телефона на код, чтобы открыть лекции и презентации этого предмета.',
@@ -90,6 +95,11 @@ I18N = {
         'offline':'Материалдар уақытша қолжетімсіз. Бетті сәл кейінірек жаңартып көр.',
         'office_hint':'Файл көрсетілмесе, оны төмендегі батырмамен жүктеп ал.',
         'nav_home':'Басты бет', 'nav_admin':'Оқытушыға',
+        'search_open':'Іздеу', 'search_ph':'Пән немесе материал іздеу…', 'search_empty':'Ештеңе табылмады',
+        'course_word':'Пән', 'prev':'Алдыңғы', 'next':'Келесі',
+        'f_course':'Пән', 'f_kind':'Түрі', 'f_format':'Формат', 'f_size':'Көлемі', 'f_lang':'Тілі',
+        'f_sections':'Бөлімдер', 'f_langs':'Тілдер', 'f_formats':'Форматтар', 'f_keys':'Іздеу',
+        'f_keys_hint':'Кез келген жерде / немесе Ctrl K бас', 'f_made':'Оқу үшін жасалған',
         'poster':'QR-коды бар A4 плакат', 'poster_download':'↓ Плакатты жүктеу (HTML)', 'print':'Басып шығару / PDF',
         'poster_scan':'Барлық материал — QR-код арқылы',
         'poster_hint':'Осы пәннің дәрістері мен презентацияларын ашу үшін телефон камерасын кодқа бағытта.',
@@ -268,10 +278,13 @@ def topnav() -> None:
     links.append(('admin', t['nav_admin']))
     other = {'ru': 'kz', 'kz': 'ru'}.get(lang)
     with st.container(key='topnav'):
-        cols = st.columns([3.2] + [1] * len(links) + [0.7], vertical_alignment='center', gap='small')
+        cols = st.columns([3.2, 1.4] + [1] * len(links) + [0.7], vertical_alignment='center', gap='small')
         if cols[0].button('StudySpace', type='tertiary', key='nav-brand'):
             route('welcome', lang='')
-        for col, (target, label) in zip(cols[1:], links):
+        # Opened by fx.js (click, "/" or Ctrl/Cmd+K); a plain HTML button, so no Streamlit rerun.
+        cols[1].markdown(f'<button class="ss-search" type="button" aria-label="{esc(t["search_open"])}">'
+                         f'<span>{esc(t["search_open"])}</span><kbd>/</kbd></button>', unsafe_allow_html=True)
+        for col, (target, label) in zip(cols[2:], links):
             if col.button(label, type='primary' if current == target else 'tertiary', key='nav-'+target):
                 route(target)
         if cols[-1].button(other.upper() if other else 'RU/KZ', key='nav-lang', help=t['change_lang']):
@@ -328,12 +341,14 @@ def welcome() -> None:
         unsafe_allow_html=True,
     )
     header('Язык обучения / Оқу тілі', '', '01')
-    sections = [('ru', 'Русский язык', 'Лекции и презентации на русском языке', 'Открыть'),
-                ('kz', 'Қазақ тілі', 'Қазақ тіліндегі дәрістер мен презентациялар', 'Ашу')]
-    for n, (code, title, sub, label) in enumerate(sections, 1):
-        if row('lang_'+code, n, title, sub=sub, meta=code.upper(), big=True, button=label+' →', button_key='choose_'+code):
-            route('home', lang=code)
-    end_list()
+    sections = [('ru', 'Русский', 'Лекции, презентации и материалы для самостоятельной работы на русском языке.', 'Открыть раздел'),
+                ('kz', 'Қазақша', 'Қазақ тіліндегі дәрістер, презентациялар және өзіндік жұмысқа арналған материалдар.', 'Бөлімді ашу')]
+    for col, (code, title, sub, label) in zip(st.columns(2, gap='small'), sections):
+        with col, st.container(key='langpanel_'+code):
+            st.markdown(f'<div class="langpanel"><span class="lp-code">{code.upper()}</span>'
+                        f'<b>{esc(title)}<span class="dot">.</span></b><p>{esc(sub)}</p></div>', unsafe_allow_html=True)
+            if st.button(label+'  →', key='choose_'+code, type='primary', use_container_width=True):
+                route('home', lang=code)
 
 
 def recent_ids() -> list[str]:
@@ -477,11 +492,27 @@ def reader(materials: list[dict], lang: str) -> None:
     st.session_state['recent'] = [item['id']] + [i for i in st.session_state.get('recent', []) if i != item['id']][:7]
     if item['lang'] != lang:
         lang = item['lang']; t = I18N[lang]
-    if st.button(t['back_course'], key='back_reader', type='tertiary'):
-        route('course', lang=lang, course=item['course_id'])
-    header(item['title'], display_course(item['course'], lang), t['lectures_one'] if item['kind'] == 'lectures' else t['presentations_one'])
-    st.markdown(f'<div class="meta-line">{esc(item["extension"].lstrip(".").upper())} · {esc(LANG_LABELS[lang])} · {esc(human_size(item["size"]))}'
-                + (f' · <span class="tag-new">{esc(t["new"])}</span>' if item.get('new') else '') + '</div>', unsafe_allow_html=True)
+    kind = t['lectures_one'] if item['kind'] == 'lectures' else t['presentations_one']
+    with st.container(key='crumbs'):
+        a, b, c = st.columns(3, vertical_alignment='center')
+        if a.button(t['nav_home'], key='crumb_home', type='tertiary'):
+            route('home', lang=lang)
+        if b.button(display_course(item['course'], lang), key='crumb_course', type='tertiary'):
+            route('course', lang=lang, course=item['course_id'])
+        c.markdown(f'<span class="crumb-current">{esc(item["title"])}</span>', unsafe_allow_html=True)
+    # Same order as the course page: lectures first, then presentations.
+    siblings = sorted((m for m in materials if m['course_id'] == item['course_id'] and m['lang'] == lang),
+                      key=lambda m: m['kind'] != 'lectures')
+    position = next(i for i, m in enumerate(siblings) if m['id'] == item['id'])
+    header(item['title'], '', f'{position + 1:02d}')
+    view, side = st.columns([2.6, 1], gap='large')
+    with side:
+        facts = [(t['f_course'], display_course(item['course'], lang)), (t['f_kind'], kind),
+                 (t['f_format'], item['extension'].lstrip('.').upper()), (t['f_size'], human_size(item['size'])),
+                 (t['f_lang'], LANG_LABELS[lang])]
+        st.markdown('<dl class="facts">' + ''.join(f'<div><dt>{esc(k)}</dt><dd>{esc(v)}</dd></div>' for k, v in facts)
+                    + (f'<div><dt>{esc(t["new"])}</dt><dd><span class="tag-new">{esc(item["new"])}</span></dd></div>' if item.get('new') else '')
+                    + f'<div><dt>№</dt><dd>{position + 1:02d} / {len(siblings):02d}</dd></div></dl>', unsafe_allow_html=True)
     repo, branch, _ = settings()
     try:
         filedata = material_bytes(repo, branch, item['path'], item['sha'])
@@ -489,34 +520,42 @@ def reader(materials: list[dict], lang: str) -> None:
         st.error(str(exc))
         return
     suffix = item['extension']
-    if suffix == '.pdf':
-        try:
-            st.pdf(filedata, height=680)
-        except Exception:
-            st.info(t['no_preview'])
-    elif suffix in ('.md', '.txt'):
-        with st.container(border=True):
-            text = filedata.decode('utf-8-sig', errors='replace')
-            if suffix == '.md':
-                st.markdown(text)
-            else:
-                st.text(text)
-    elif suffix == '.html':
-        # A data: URL runs in an opaque origin, so scripts in an uploaded file cannot reach this app
-        # (an HTML string would be embedded same-origin and could click admin buttons).
-        st.iframe('data:text/html;charset=utf-8;base64,'+base64.b64encode(filedata).decode('ascii'), height=650)
-    elif suffix in OFFICE_PREVIEW and item['size'] <= OFFICE_VIEWER_LIMIT:
-        # Microsoft's viewer fetches the public raw GitHub file; the sha keeps its cache fresh.
-        source = GithubStore(repo, branch).raw_url(item['path'])+'?rev='+item['sha']
-        st.iframe('https://view.officeapps.live.com/op/embed.aspx?src='+quote(source, safe=''), height=640)
-        st.caption(t['office_hint'])
-    else:
-        st.info(t['preview'])
-    st.download_button(t['download'], filedata, file_name=item['filename'],
-                       mime=mimetypes.guess_type(item['filename'])[0] or 'application/octet-stream',
-                       type='primary', use_container_width=True, key='reader_download')
-    share(item, t)
-    st.caption('StudySpace · '+t['quick'])
+    with view:
+        if suffix == '.pdf':
+            try:
+                st.pdf(filedata, height=760)
+            except Exception:
+                st.info(t['no_preview'])
+        elif suffix in ('.md', '.txt'):
+            with st.container(key='textdoc'):
+                text = filedata.decode('utf-8-sig', errors='replace')
+                if suffix == '.md':
+                    st.markdown(text)
+                else:
+                    st.text(text)
+        elif suffix == '.html':
+            # A data: URL runs in an opaque origin, so scripts in an uploaded file cannot reach this app
+            # (an HTML string would be embedded same-origin and could click admin buttons).
+            st.iframe('data:text/html;charset=utf-8;base64,'+base64.b64encode(filedata).decode('ascii'), height=720)
+        elif suffix in OFFICE_PREVIEW and item['size'] <= OFFICE_VIEWER_LIMIT:
+            # Microsoft's viewer fetches the public raw GitHub file; the sha keeps its cache fresh.
+            source = GithubStore(repo, branch).raw_url(item['path'])+'?rev='+item['sha']
+            st.iframe('https://view.officeapps.live.com/op/embed.aspx?src='+quote(source, safe=''), height=720)
+            st.caption(t['office_hint'])
+        else:
+            st.info(t['preview'])
+    with side:
+        st.download_button(t['download'], filedata, file_name=item['filename'],
+                           mime=mimetypes.guess_type(item['filename'])[0] or 'application/octet-stream',
+                           type='primary', use_container_width=True, key='reader_download')
+        with st.container(key='pager'):
+            if position > 0 and st.button('← '+siblings[position - 1]['title'], key='prev_item',
+                                          help=t['prev'], use_container_width=True):
+                route('reader', course=item['course_id'], material=siblings[position - 1]['id'])
+            if position < len(siblings) - 1 and st.button('→ '+siblings[position + 1]['title'], key='next_item',
+                                                          help=t['next'], use_container_width=True):
+                route('reader', course=item['course_id'], material=siblings[position + 1]['id'])
+        share(item, t)
 
 
 def site_url(**params: str) -> str:
@@ -986,6 +1025,44 @@ def admin(config: dict, materials: list[dict]) -> None:
         st.caption('Открыть GitHub: '+f'https://github.com/{repo}/tree/{branch}/materials/uploads')
 
 
+def search_index(config: dict, materials: list[dict]) -> None:
+    """Hidden JSON for the client-side search palette in fx.js: only what students can already open."""
+    lang = st.session_state.get('lang', '')
+    t = I18N.get(lang, I18N['ru'])
+    entries = []
+    for code in LANG_LABELS:
+        tl = I18N[code]
+        courses = [c for c in config['courses'] if code in course_languages(c)]
+        ids = {c['id'] for c in courses}
+        entries += [{'k': tl['course_word'], 't': display_course(c, code), 's': c.get('icon', ''), 'l': code, 'c': 1,
+                     'u': '?'+urlencode({'lang': code, 'course': c['id']})} for c in courses]
+        entries += [{'k': tl['lectures_one'] if m['kind'] == 'lectures' else tl['presentations_one'], 't': m['title'],
+                     's': display_course(m['course'], code), 'l': code, 'u': '?'+urlencode({'lang': code, 'material': m['id']})}
+                    for m in materials if m['lang'] == code and m['course_id'] in ids]
+    st.markdown(f'<div id="ss-index" hidden data-lang="{esc(lang)}" data-ph="{esc(t["search_ph"])}" '
+                f'data-empty="{esc(t["search_empty"])}" data-items="{esc(json.dumps(entries, ensure_ascii=False))}"></div>',
+                unsafe_allow_html=True)
+
+
+def footer() -> None:
+    lang = st.session_state.get('lang', '')
+    t = I18N.get(lang, I18N['ru'])
+    # target=_self: plain links reload the app in this tab instead of opening a new one.
+    links = ([(t['nav_home'], f'?lang={lang}'), (t['library'], f'?lang={lang}&view=library'), (t['about'], f'?lang={lang}&view=about')]
+             if lang in LANG_LABELS else [('Русский', '?lang=ru'), ('Қазақша', '?lang=kz')])
+    a = lambda label, href: f'<a href="{esc(href)}" target="_self">{esc(label)}</a>'  # noqa: E731
+    st.markdown(
+        '<footer class="footer-big"><div class="fcols">'
+        f'<div><span>{esc(t["f_sections"])}</span>' + ''.join(a(l, h) for l, h in links) + '</div>'
+        f'<div><span>{esc(t["f_langs"])}</span>{a("Русский", "?lang=ru")}{a("Қазақша", "?lang=kz")}</div>'
+        f'<div><span>{esc(t["f_formats"])}</span><p>PDF · PPTX · DOCX<br>MD · TXT · HTML</p></div>'
+        f'<div><span>{esc(t["f_keys"])}</span><p>{esc(t["f_keys_hint"])}</p></div></div>'
+        '<div class="wordmark" aria-hidden="true">StudySpace<span>■</span></div>'
+        f'<div class="fbottom"><span>© 2026 StudySpace</span><span>{esc(t["f_made"])}</span></div></footer>',
+        unsafe_allow_html=True,
+    )
+
+
 def main() -> None:
     style()
     effects()
@@ -1014,8 +1091,8 @@ def main() -> None:
         about(lang)
     else:
         welcome()
-    st.markdown('<footer class="footer"><span>StudySpace<span class="dot">■</span></span><span>Лекции · Дәрістер · PDF · PPTX · DOCX</span>'
-                '<span>© 2026</span></footer>', unsafe_allow_html=True)
+    footer()
+    search_index(config, materials)
 
 
 if __name__ == '__main__':

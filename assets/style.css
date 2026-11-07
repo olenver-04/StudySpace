@@ -258,3 +258,143 @@ iframe[src^="data:text/html"] {background: #fff}
   *, *::before, *::after {animation: none !important; transition: none !important; scroll-behavior: auto !important}
 }
 .st-key-topnav button[kind="primary"]:hover {background: transparent !important; color: var(--red) !important}
+
+/* =====================================================================
+   5.1 polish: search palette, reader layout, language panels, footer,
+   typography and motion details.
+   ===================================================================== */
+
+/* ---------- Typography details ---------- */
+html, body {-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility}
+.stApp {font-feature-settings: 'cv11', 'ss01', 'ss03'}
+.hero h1, .course-hero h1, .heading-block h2, .row-title, .langpanel b {text-wrap: balance}
+.hero-lead, .heading-block p, .row-sub, .langpanel p {text-wrap: pretty}
+.stats b, .row-n, .row-meta, .result-count b, .admin-stat strong, .facts dd {font-variant-numeric: tabular-nums}
+
+/* ---------- Motion ---------- */
+/* Rows rise in a quick stagger when a page is shown (wrappers are siblings in the main block). */
+[class*="st-key-row_"] {animation: rise .5s cubic-bezier(.2,.7,.2,1) backwards}
+[data-testid="stLayoutWrapper"]:nth-child(2) > [class*="st-key-row_"] {animation-delay: .03s}
+[data-testid="stLayoutWrapper"]:nth-child(3) > [class*="st-key-row_"] {animation-delay: .06s}
+[data-testid="stLayoutWrapper"]:nth-child(4) > [class*="st-key-row_"] {animation-delay: .09s}
+[data-testid="stLayoutWrapper"]:nth-child(5) > [class*="st-key-row_"] {animation-delay: .12s}
+[data-testid="stLayoutWrapper"]:nth-child(6) > [class*="st-key-row_"] {animation-delay: .15s}
+[data-testid="stLayoutWrapper"]:nth-child(n+7) > [class*="st-key-row_"] {animation-delay: .18s}
+[class*="st-key-row_"] [data-testid="stButton"] button p {transition: transform .2s cubic-bezier(.2,.7,.2,1)}
+[class*="st-key-row_"]:hover [data-testid="stButton"] button p {transform: translateX(4px); color: var(--red)}
+/* Nav links: underline grows from the left. */
+.st-key-topnav button[kind="tertiary"]:not(.st-key-nav-brand *) p {
+  background: linear-gradient(var(--red), var(--red)) 0 100% / 0 2px no-repeat; padding-bottom: 5px; transition: background-size .25s ease
+}
+.st-key-topnav button[kind="tertiary"]:not(.st-key-nav-brand *):hover p {background-size: 100% 2px}
+.st-key-topnav button[kind="tertiary"]:hover {color: var(--ink) !important}
+/* While Streamlit reruns, the old page fades instead of jumping. */
+[data-stale="true"] {opacity: .45 !important; transition: opacity .2s ease .1s}
+#ss-busy {position: fixed; top: 0; left: 0; width: 28%; height: 3px; z-index: 1000002; background: var(--red); pointer-events: none; opacity: 0; transform: translateX(-100%)}
+.ss-busy #ss-busy {opacity: 1; animation: busy 1s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes busy {from {transform: translateX(-100%)} to {transform: translateX(380%)}}
+
+/* ---------- Search trigger in the top bar ---------- */
+.ss-search {
+  display: flex; align-items: center; justify-content: space-between; gap: 28px; width: 100%; min-width: 150px;
+  padding: 6px 8px 6px 12px; background: var(--white); border: 1px solid var(--rule-soft); cursor: pointer;
+  font: 500 13px var(--text); color: var(--muted); transition: border-color .15s ease, color .15s ease;
+}
+.ss-search:hover {border-color: var(--ink); color: var(--ink)}
+.ss-search kbd, .ss-pal-box kbd {font: 500 11px var(--mono); border: 1px solid var(--rule-soft); padding: 1px 6px; color: var(--ink-2); background: var(--paper)}
+[data-testid="stElementContainer"]:has(#ss-index) {position: absolute !important; width: 0; height: 0; overflow: hidden; margin: 0}
+
+/* ---------- Search palette (built by fx.js) ---------- */
+#ss-palette {
+  position: fixed; inset: 0; z-index: 1000003; display: none; align-items: flex-start; justify-content: center;
+  padding: 12vh 16px 16px; background: rgba(17,17,17,.38); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+#ss-palette.open {display: flex; animation: fade .15s ease}
+.ss-pal-box {width: min(680px, 100%); background: var(--paper); border: 1px solid var(--ink); box-shadow: 0 30px 80px -30px rgba(0,0,0,.45); animation: drop .2s cubic-bezier(.2,.7,.2,1)}
+.ss-pal-head {display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid var(--ink)}
+.ss-pal-icon {font-size: 22px; color: var(--red)}
+.ss-pal-head input {flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; padding: 20px 0; font: 600 24px var(--display); letter-spacing: -.03em; color: var(--ink)}
+.ss-pal-head input::placeholder {color: #A9A49C}
+.ss-pal-list {list-style: none; margin: 0; padding: 6px 0; max-height: min(56vh, 520px); overflow-y: auto}
+.ss-pal-list li[role=option] {display: grid; grid-template-columns: 1fr auto; column-gap: 16px; padding: 10px 16px; cursor: pointer; border-left: 3px solid transparent}
+.ss-pal-list li .k {grid-column: 1; font: 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--muted)}
+.ss-pal-list li b {grid-column: 1; font: 600 17px/1.3 var(--display); letter-spacing: -.02em; color: var(--ink)}
+.ss-pal-list li i {grid-column: 2; grid-row: 1 / span 2; align-self: center; font: normal 11px var(--mono); color: var(--muted)}
+.ss-pal-list li mark {background: none; color: var(--red); text-decoration: underline; text-underline-offset: 3px}
+.ss-pal-list li.on {background: var(--white); border-left-color: var(--red)}
+.ss-pal-empty {padding: 28px 16px; color: var(--muted)}
+.ss-pal-foot {display: flex; gap: 18px; padding: 10px 16px; border-top: 1px solid var(--rule-soft); font: 11px var(--mono); color: var(--muted)}
+.ss-pal-foot span {display: flex; gap: 4px}
+@keyframes fade {from {opacity: 0}}
+@keyframes drop {from {opacity: 0; transform: translateY(-10px) scale(.985)}}
+
+/* ---------- Welcome: language panels ---------- */
+[class*="st-key-langpanel_"] {
+  min-height: 340px; padding: 26px 26px 22px; border: 1px solid var(--ink); justify-content: space-between;
+  transition: background .25s ease, color .25s ease; animation: rise .6s cubic-bezier(.2,.7,.2,1) backwards;
+}
+.st-key-langpanel_kz {animation-delay: .08s}
+.langpanel {display: flex; flex-direction: column; min-height: 230px}
+.lp-code {font: 12px var(--mono); color: var(--red)}
+.langpanel b {display: block; margin-top: auto; font: 700 clamp(48px, 6.4vw, 96px)/.9 var(--display); letter-spacing: -.055em; transition: transform .35s cubic-bezier(.2,.7,.2,1), color .25s ease}
+.langpanel p {margin: 18px 0 0; max-width: 420px; font-size: 15px; line-height: 1.55; color: var(--ink-2); transition: color .25s ease}
+[class*="st-key-langpanel_"]:hover {background: var(--ink)}
+[class*="st-key-langpanel_"]:hover .langpanel b {color: var(--paper); transform: translateX(6px)}
+[class*="st-key-langpanel_"]:hover .langpanel p {color: #C9C5BE}
+[class*="st-key-langpanel_"]:hover button[kind="primary"] {background: var(--red) !important; border-color: var(--red) !important}
+
+/* ---------- Breadcrumbs ---------- */
+.st-key-crumbs {padding-top: 22px}
+.st-key-crumbs [data-testid="stHorizontalBlock"] {flex-wrap: wrap !important; flex-direction: row !important; gap: 4px 0 !important}
+.st-key-crumbs [data-testid="stColumn"] {width: auto !important; flex: 0 1 auto !important; min-width: 0 !important; display: flex; flex-direction: row; align-items: center}
+.st-key-crumbs [data-testid="stColumn"]:not(:last-child)::after {content: '/'; margin: 0 12px; font: 12px var(--mono); color: var(--rule-soft)}
+.st-key-crumbs button[kind] {min-height: 24px !important; padding: 0 !important}
+.st-key-crumbs button p {font: 12px var(--mono) !important; text-transform: uppercase; letter-spacing: .04em; color: var(--muted)}
+.st-key-crumbs button:hover p {color: var(--red)}
+.crumb-current {font: 12px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--ink); display: inline-block; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle}
+
+/* ---------- Reader: viewer + side panel ---------- */
+.facts {margin: 0 0 18px; border-top: 1px solid var(--rule)}
+.facts > div {display: grid; grid-template-columns: 90px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule-soft)}
+.facts dt {font: 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--muted)}
+.facts dd {margin: 0; font-size: 14px; font-weight: 500; color: var(--ink); overflow-wrap: anywhere}
+.facts .tag-new {margin: 0}
+.st-key-pager {gap: 8px !important; margin-top: 4px}
+.st-key-pager button {justify-content: flex-start !important; min-height: 44px; text-align: left}
+.st-key-pager button > div {justify-content: flex-start !important; width: 100%; min-width: 0}
+.ss-pal-head input:focus, .ss-pal-head input:focus-visible {outline: none !important}
+.st-key-pager button p {overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500 !important}
+.st-key-textdoc {background: var(--white); border: 1px solid var(--ink); padding: 28px 32px; max-height: 760px; overflow-y: auto}
+.st-key-share .share-card {flex-direction: column; align-items: flex-start; gap: 14px}
+.st-key-share .share-qr {width: 132px; height: 132px}
+
+/* ---------- Big footer ---------- */
+.footer-big {margin-top: 140px; border-top: 1px solid var(--rule); padding-top: 18px; overflow: hidden}
+.fcols {display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px}
+.fcols > div {display: flex; flex-direction: column; gap: 8px; min-width: 0}
+.fcols span {font: 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 6px}
+.fcols a {color: var(--ink) !important; text-decoration: none !important; font-size: 15px; font-weight: 500; width: fit-content; background: linear-gradient(var(--red), var(--red)) 0 100% / 0 1px no-repeat; transition: background-size .25s ease}
+.fcols a:hover {background-size: 100% 1px; color: var(--red) !important}
+.fcols p {margin: 0; font-size: 14px; line-height: 1.6; color: var(--ink-2)}
+/* The wordmark is ~5.2x its font size wide; container units make it fill the footer width exactly. */
+.footer-big {container-type: inline-size}
+.wordmark {padding-bottom: .07em}
+.wordmark {margin: 72px 0 0 -0.04em; font: 800 15vw/.78 var(--display); font-size: 18.8cqi; letter-spacing: -.07em; color: var(--ink); white-space: nowrap; user-select: none}
+.wordmark span {color: var(--red); font-size: .32em; vertical-align: .9em; margin-left: .02em}
+.fbottom {display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 18px; border-top: 1px solid var(--rule); padding: 12px 0 6px; font: 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2)}
+
+@media (max-width: 900px) {
+  .fcols {grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 28px}
+}
+@media (max-width: 640px) {
+  [class*="st-key-langpanel_"] {min-height: 260px; padding: 20px}
+  .langpanel {min-height: 160px}
+  .ss-search {min-width: 0; gap: 12px}
+  .ss-pal-head input {font-size: 19px; padding: 16px 0}
+  #ss-palette {padding-top: 8vh}
+  .st-key-textdoc {padding: 18px}
+  .crumb-current {max-width: 22ch}
+}
+@media (prefers-reduced-motion: reduce) {
+  #ss-palette.open, .ss-pal-box {animation: none}
+}
