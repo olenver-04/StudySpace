@@ -694,3 +694,16 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 .wordmark.egg {color: var(--red)}
 .wordmark.egg span {color: var(--ink)}
 .wordmark {transition: color .3s ease}
+
+/* ---------- Theme switch animation (fx.js) ---------- */
+/* View Transitions: the old page stays still, the new one is revealed by a growing circle. */
+::view-transition-old(root), ::view-transition-new(root) {animation: none; mix-blend-mode: normal}
+::view-transition-old(root) {z-index: 1}
+::view-transition-new(root) {z-index: 2}
+/* Browsers without View Transitions: everything cross-fades to the new colours. */
+.ss-theming, .ss-theming * {
+  transition: background-color .5s ease, color .5s ease, border-color .5s ease, fill .5s ease, box-shadow .5s ease !important;
+}
+/* The switch itself turns half a circle, like the moon flipping. */
+.ss-theme span {transition: transform .7s cubic-bezier(.65,0,.35,1)}
+.ss-instant, .ss-instant * {transition: none !important}

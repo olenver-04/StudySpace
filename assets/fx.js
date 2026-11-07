@@ -41,14 +41,37 @@
       if (text && top.getAttribute('aria-label') !== text) { top.setAttribute('aria-label', text); top.title = text; }
     }, 1000);
 
-    // Theme: the server already applied a saved choice; this flips it instantly and saves it for next time.
+    // Theme: the server already applied a saved choice; this flips it and saves it for next time.
+    // The new theme spreads as a circle from the button (View Transitions API); elsewhere colours cross-fade.
+    var themeBusy = false;
     document.addEventListener('click', function (e) {
-      if (!(e.target.closest && e.target.closest('.ss-theme'))) return;
+      var button = e.target.closest && e.target.closest('.ss-theme');
+      if (!button || themeBusy) return;
       var root = document.documentElement;
       var dark = getComputedStyle(root).getPropertyValue('--paper').trim().toLowerCase() === '#0f0f0e';
-      root.classList.remove('ss-dark', 'ss-light');
-      root.classList.add(dark ? 'ss-light' : 'ss-dark');
-      document.cookie = 'ss_theme=' + (dark ? 'light' : 'dark') + '; path=/; max-age=63072000; SameSite=Lax';
+      function flip() {
+        root.classList.remove('ss-dark', 'ss-light');
+        root.classList.add(dark ? 'ss-light' : 'ss-dark');
+        document.cookie = 'ss_theme=' + (dark ? 'light' : 'dark') + '; path=/; max-age=63072000; SameSite=Lax';
+      }
+      if (reduce) { flip(); return; }
+      themeBusy = true;
+      if (document.startViewTransition) {
+        var r = button.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+        var radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+        // Own colour transitions off, or the "new" snapshot would be captured halfway through a fade.
+        root.classList.add('ss-instant');
+        var transition = document.startViewTransition(flip);
+        transition.ready.then(function () {
+          root.animate({clipPath: ['circle(0px at ' + x + 'px ' + y + 'px)', 'circle(' + radius + 'px at ' + x + 'px ' + y + 'px)']},
+                       {duration: 700, easing: 'cubic-bezier(.65,0,.35,1)', pseudoElement: '::view-transition-new(root)'});
+        }).catch(function () { /* transition skipped: the theme is already switched */ });
+        transition.finished.finally(function () { root.classList.remove('ss-instant'); themeBusy = false; });
+      } else {
+        root.classList.add('ss-theming');
+        flip();
+        setTimeout(function () { root.classList.remove('ss-theming'); themeBusy = false; }, 550);
+      }
     });
 
     // ---------- Easter egg: the author's nickname in the footer ----------
