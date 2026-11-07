@@ -520,3 +520,89 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 /* The menu popover must never widen the page on phones. */
 [data-testid="stMain"], [data-testid="stAppViewContainer"] {overflow-x: hidden}
 [data-testid="stPopoverBody"] {max-width: calc(100vw - 24px)}
+
+/* =====================================================================
+   5.4: presentation covers, card grid, slide strip, word reveal,
+   scroll-driven reveals.
+   ===================================================================== */
+
+/* ---------- Headline words rise one after another ---------- */
+.w {display: inline-block; animation: word .8s cubic-bezier(.2,.7,.2,1) backwards; animation-delay: calc(var(--i, 0) * 70ms + 80ms)}
+.hero h1, .course-hero h1 {animation: none}
+.hero h1 .dot, .course-hero h1 .dot {display: inline-block; animation: dotpop .5s cubic-bezier(.3,1.6,.5,1) .7s backwards}
+@keyframes word {from {opacity: 0; transform: translateY(.45em); filter: blur(6px)} to {opacity: 1; transform: none; filter: none}}
+@keyframes dotpop {from {opacity: 0; transform: scale(0)}}
+
+/* ---------- Stats adapt to how many numbers there are ---------- */
+.stats-auto {grid-template-columns: repeat(auto-fit, minmax(150px, 1fr))}
+
+/* ---------- Cards with slide covers ---------- */
+.grid-gap {height: 28px}
+[class*="st-key-card_"] {gap: 0 !important; cursor: pointer; margin-bottom: 18px}
+.card {position: relative}
+.card-cover {position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: var(--paper-2); border: 1px solid var(--rule)}
+.card-cover img {width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .6s cubic-bezier(.2,.7,.2,1), filter .4s ease}
+.card-cover::after {content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 0 var(--red); transition: box-shadow .25s ease; pointer-events: none}
+[class*="st-key-card_"]:hover .card-cover img {transform: scale(1.045)}
+[class*="st-key-card_"]:hover .card-cover::after {box-shadow: inset 0 0 0 3px var(--red)}
+.card-ph {position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 14px 16px;
+  background: repeating-linear-gradient(135deg, transparent 0 14px, color-mix(in srgb, var(--rule-soft) 45%, transparent) 14px 15px), var(--paper-2)}
+.card-ph b {font: 700 44px/1 var(--display); letter-spacing: -.05em; color: var(--red)}
+.card-ph span {font: 600 15px/1.25 var(--display); letter-spacing: -.02em; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden}
+.card-badges {position: absolute; top: 10px; left: 10px; display: flex; gap: 6px}
+.card-badge {font: 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; padding: 4px 7px 3px; background: var(--paper); color: var(--ink); border: 1px solid var(--ink)}
+.card-badge.new {background: var(--red); color: #fff; border-color: var(--red)}
+.card-badge.done {background: var(--ink); color: var(--paper)}
+.card-body {display: grid; grid-template-columns: 34px 1fr; column-gap: 8px; padding-top: 12px}
+.card-n {font: 12px var(--mono); color: var(--muted); padding-top: 3px}
+.card-title {font: 600 17px/1.25 var(--display); letter-spacing: -.02em; color: var(--ink); min-height: 2.5em;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; transition: color .2s ease}
+.card-meta {grid-column: 2; margin-top: 6px; font: 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--muted)}
+[class*="st-key-card_"]:hover .card-title {color: var(--red)}
+[class*="st-key-card_"] [data-testid="stButton"] button {justify-content: flex-start; min-height: 34px; padding: 0 0 0 42px !important}
+[class*="st-key-card_"] [data-testid="stButton"] button p {font-size: 13px; font-weight: 600; transition: transform .2s cubic-bezier(.2,.7,.2,1)}
+[class*="st-key-card_"]:hover [data-testid="stButton"] button p {transform: translateX(4px); color: var(--red)}
+.card:has(.card-badge.done) .card-cover img {filter: grayscale(.85) contrast(.9)}
+
+/* ---------- Mini covers in index rows ---------- */
+.row.has-thumb {grid-template-columns: var(--gutter) 112px minmax(0, 1fr) auto; align-items: center}
+.row-thumb {width: 112px; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--rule-soft); display: block; transition: border-color .2s ease}
+[class*="st-key-row_"]:hover .row-thumb {border-color: var(--red)}
+
+/* ---------- Slide strip (marquee) ---------- */
+.strip {margin: 34px calc(50% - 50vw) 0; overflow: hidden; border-block: 1px solid var(--rule); padding: 14px 0;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)}
+.strip-track {display: flex; gap: 14px; width: max-content; animation: strip calc(var(--n, 8) * 5s) linear infinite}
+.strip-copy {display: contents}
+.strip:hover .strip-track {animation-play-state: paused}
+.strip-item {position: relative; flex: none; width: 260px; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--rule-soft); display: block; text-decoration: none !important}
+.strip-item img {width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s cubic-bezier(.2,.7,.2,1)}
+.strip-item span {position: absolute; inset: auto 0 0 0; padding: 22px 10px 8px; font: 600 12px/1.25 var(--display); color: #fff;
+  background: linear-gradient(transparent, rgba(0,0,0,.72)); opacity: 0; transform: translateY(6px); transition: opacity .25s ease, transform .25s ease}
+.strip-item:hover {border-color: var(--red)}
+.strip-item:hover img {transform: scale(1.06)}
+.strip-item:hover span {opacity: 1; transform: none}
+@keyframes strip {to {transform: translateX(calc(-50% - 7px))}}
+
+/* ---------- Scroll-driven reveals (progressive: browsers without support just show everything) ---------- */
+@supports (animation-timeline: view()) {
+  .heading-block, [class*="st-key-card_"], .apanel, .stats {
+    animation: reveal linear both; animation-timeline: view(); animation-range: entry 0% entry 55%;
+  }
+  @keyframes reveal {from {opacity: 0; transform: translateY(28px)} to {opacity: 1; transform: none}}
+}
+
+@media (max-width: 640px) {
+  .row.has-thumb {grid-template-columns: var(--gutter) minmax(0, 1fr)}
+  .row.has-thumb .row-thumb {display: none}
+  .strip-item {width: 200px}
+  .card-ph b {font-size: 36px}
+}
+@media (prefers-reduced-motion: reduce) {
+  .strip-track {animation: none}
+  .strip {overflow-x: auto}
+  .strip-copy {display: none}
+}
+/* Streamlit pulls markdown blocks up by 1rem; without this the card button overlaps the meta line. */
+.card {padding-bottom: 28px}
+[class*="st-key-card_"] [data-testid="stButton"] button > div {justify-content: flex-start !important}

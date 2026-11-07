@@ -63,6 +63,7 @@ I18N = {
         'nav_home':'Главная', 'nav_admin':'Преподавателю',
         'studied':'изучено', 'studied_title':'Изучено', 'mark_done':'✓  Отметить как изученное',
         'unmark_done':'✓  Изучено · снять отметку', 'in_text':'В тексте',
+        'new_week':'новых за неделю', 'f_slides':'Слайдов', 'strip':'Лента слайдов',
         'theme':'Светлая / тёмная тема', 'menu':'Меню', 'to_top':'Наверх',
         'search_open':'Поиск', 'search_ph':'Найти предмет или материал…', 'search_empty':'Ничего не найдено',
         'course_word':'Предмет', 'prev':'Предыдущий', 'next':'Следующий',
@@ -102,6 +103,7 @@ I18N = {
         'nav_home':'Басты бет', 'nav_admin':'Оқытушыға',
         'studied':'оқылды', 'studied_title':'Оқылды', 'mark_done':'✓  Оқылды деп белгілеу',
         'unmark_done':'✓  Оқылды · белгіні алу', 'in_text':'Мәтінде',
+        'new_week':'аптадағы жаңа', 'f_slides':'Слайд', 'strip':'Слайдтар таспасы',
         'theme':'Ашық / қараңғы режим', 'menu':'Мәзір', 'to_top':'Жоғары',
         'search_open':'Іздеу', 'search_ph':'Пән немесе материал іздеу…', 'search_empty':'Ештеңе табылмады',
         'course_word':'Пән', 'prev':'Алдыңғы', 'next':'Келесі',
@@ -266,6 +268,46 @@ def effects() -> None:
     st.iframe('<script>'+(BASE/'assets/fx.js').read_text(encoding='utf-8')+'</script>', height=1)
 
 
+PLURALS = {
+    'ru': {'slides': ('слайд', 'слайда', 'слайдов'), 'materials': ('материал', 'материала', 'материалов'),
+           'pres': ('презентация', 'презентации', 'презентаций'), 'courses': ('предмет', 'предмета', 'предметов')},
+    'kz': {'slides': ('слайд',) * 3, 'materials': ('материал',) * 3, 'pres': ('презентация',) * 3, 'courses': ('пән',) * 3},
+}
+
+
+def plural(n: int, lang: str, word: str) -> str:
+    """1 слайд, 2 слайда, 5 слайдов; Kazakh nouns do not change after numbers."""
+    one, few, many = PLURALS.get(lang, PLURALS['ru'])[word]
+    if n % 100 in (11, 12, 13, 14):
+        return many
+    return one if n % 10 == 1 else few if n % 10 in (2, 3, 4) else many
+
+
+def mixed() -> bool:
+    """True once any lecture exists; until then the site is presentation-only and hides the split."""
+    return st.session_state.get('mixed', False)
+
+
+def slides(item: dict) -> int:
+    return fulltext_index().pages.get(item.get('sha', ''), 0)
+
+
+def cover_url(item: dict) -> str:
+    """Static URL of the rendered first slide, or '' while it is not ready (or not a PDF)."""
+    name = f'{item["sha"]}.webp'
+    return f'app/static/thumbs/{name}' if (BASE / 'static' / 'thumbs' / name).exists() else ''
+
+
+def material_meta(item: dict, lang: str) -> str:
+    n = slides(item)
+    return ' · '.join(([f'{n} {plural(n, lang, "slides")}'] if n else []) + [item['extension'].lstrip('.').upper(), human_size(item['size'])])
+
+
+def words(text: str) -> str:
+    """Headline split into words that rise one after another (see .w in style.css)."""
+    return ' '.join(f'<span class="w" style="--i:{i}">{esc(w)}</span>' for i, w in enumerate(text.split()))
+
+
 def header(title: str, subtitle: str = '', eyebrow: str = '') -> None:
     st.markdown(
         '<div class="heading-block">'
@@ -340,12 +382,13 @@ def topnav() -> None:
 
 def row(key: str, number: int, title: str, *, kicker: str = '', sub: str = '', meta: str = '',
         new: str = '', big: bool = False, button: str = '', button_key: str = '', done: bool = False,
-        extra: str = '') -> bool:
+        extra: str = '', thumb: str = '') -> bool:
     """One line of a modernist index list; returns True when its button is pressed."""
     with st.container(key='row_'+key):
         left, right = st.columns([5, 1.25], vertical_alignment='center')
         left.markdown(
-            f'<div class="row{" is-done" if done else ""}"><span class="row-n">{"✓" if done else f"{number:02d}"}</span><div class="row-body">'
+            f'<div class="row{" is-done" if done else ""}{" has-thumb" if thumb else ""}"><span class="row-n">{"✓" if done else f"{number:02d}"}</span>'
+            + (f'<img class="row-thumb" src="{esc(thumb)}" alt="" loading="lazy">' if thumb else '') + '<div class="row-body">'
             + (f'<span class="row-kicker">{esc(kicker)}</span>' if kicker else '')
             + f'<b class="row-title{" big" if big else ""}">{esc(title)}</b>'
             + (f'<span class="row-sub">{esc(sub)}</span>' if sub else '') + extra
@@ -364,11 +407,53 @@ def material_row(item: dict, lang: str, prefix: str, number: int) -> None:
     t = I18N[lang]
     kind = t['lectures_one'] if item['kind'] == 'lectures' else t['presentations_one']
     if row(f'{prefix}_{key_of(item["id"])}', number, item['title'],
-           kicker=f'{display_course(item["course"], lang)} — {kind}',
-           meta=f'{item["extension"].lstrip(".").upper()} · {human_size(item["size"])}',
+           kicker=display_course(item['course'], lang) + (f' — {kind}' if mixed() else ''),
+           meta=material_meta(item, lang), thumb=cover_url(item),
            new=t['new'] if item.get('new') else '', button=t['open_item']+' →', button_key=f'item_{prefix}_{item["id"]}',
            done=is_done(item)):
         route('reader', course=item['course_id'], material=item['id'])
+
+
+def material_card(item: dict, lang: str, prefix: str, number: int) -> None:
+    t = I18N[lang]
+    cover, done = cover_url(item), is_done(item)
+    badges = (f'<span class="card-badge done">✓ {esc(t["studied_title"])}</span>' if done else '') + \
+             (f'<span class="card-badge new">{esc(t["new"])}</span>' if item.get('new') else '')
+    with st.container(key=f'card_{prefix}_{key_of(item["id"])}'):
+        st.markdown(
+            '<div class="card"><div class="card-cover">'
+            + (f'<img src="{esc(cover)}" alt="" loading="lazy">' if cover
+               else f'<div class="card-ph"><b>{number:02d}</b><span>{esc(item["title"])}</span></div>')
+            + f'<div class="card-badges">{badges}</div></div>'
+            f'<div class="card-body"><span class="card-n">{"✓" if done else f"{number:02d}"}</span>'
+            f'<b class="card-title">{esc(item["title"])}</b><span class="card-meta">{esc(material_meta(item, lang))}</span></div></div>',
+            unsafe_allow_html=True,
+        )
+        if st.button(t['open_item']+' →', key=f'item_{prefix}_{item["id"]}', type='tertiary', use_container_width=True):
+            route('reader', course=item['course_id'], material=item['id'])
+
+
+def material_grid(items: list[dict], lang: str, prefix: str, per_row: int = 3) -> None:
+    # One st.columns per row keeps reading order when columns stack on phones.
+    for start in range(0, len(items), per_row):
+        cols = st.columns(per_row, gap='medium')
+        for offset, item in enumerate(items[start:start + per_row]):
+            with cols[offset]:
+                material_card(item, lang, prefix, start + offset + 1)
+
+
+def slide_strip(items: list[dict], label: str) -> None:
+    """Slowly moving ribbon of slide covers; plain links (a click opens the material)."""
+    covers = [(m, cover_url(m)) for m in items]
+    covers = [(m, c) for m, c in covers if c][:16]
+    if len(covers) < 4:
+        return
+    cells = ''.join(
+        f'<a class="strip-item" href="?{esc(urlencode({"lang": m["lang"], "material": m["id"]}))}" target="_self">'
+        f'<img src="{esc(c)}" alt="{esc(m["title"])}" loading="lazy"><span>{esc(m["title"])}</span></a>' for m, c in covers)
+    st.markdown(f'<div class="strip" role="region" aria-label="{esc(label)}" style="--n:{len(covers)}">'
+                f'<div class="strip-track">{cells}<div class="strip-copy" aria-hidden="true">{cells}</div></div></div>',
+                unsafe_allow_html=True)
 
 
 def material_list(items: list[dict], lang: str, prefix: str) -> None:
@@ -377,15 +462,16 @@ def material_list(items: list[dict], lang: str, prefix: str) -> None:
     end_list()
 
 
-def welcome() -> None:
+def welcome(materials: list[dict] | None = None) -> None:
     st.markdown(
         '<section class="hero"><div class="hero-meta"><span>StudySpace</span><span>Education hub</span>'
         '<span>RU / KZ</span><span>2026</span></div>'
-        '<h1>Учиться проще, когда всё рядом<span class="dot">.</span></h1>'
+        f'<h1>{words("Учиться проще, когда всё рядом")}<span class="dot">.</span></h1>'
         '<p class="hero-lead">Лекции, презентации и материалы в одном месте. Выбери язык обучения.'
         '<br><span>Дәрістер мен презентациялар бір жерде. Оқу тілін таңда.</span></p></section>',
         unsafe_allow_html=True,
     )
+    slide_strip(materials or [], 'Слайдтар / Слайды')
     header('Язык обучения / Оқу тілі', '', '01')
     sections = [('ru', 'Русский', 'Лекции, презентации и материалы для самостоятельной работы на русском языке.', 'Открыть раздел'),
                 ('kz', 'Қазақша', 'Қазақ тіліндегі дәрістер, презентациялар және өзіндік жұмысқа арналған материалдар.', 'Бөлімді ашу')]
@@ -447,24 +533,30 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
     st.markdown(
         f'<section class="hero"><div class="hero-meta"><span>{esc(t["hero_tag"])}</span><span>{esc(LANG_LABELS[lang])}</span>'
         f'<span>PDF · PPTX · DOCX</span><span>2026</span></div>'
-        f'<h1>{esc(headline)}<span class="dot">.</span></h1><p class="hero-lead">{esc(t["hero_sub"])}</p></section>',
+        f'<h1>{words(headline)}<span class="dot">.</span></h1><p class="hero-lead">{esc(t["hero_sub"])}</p></section>',
         unsafe_allow_html=True,
     )
     if st.button(t['browse']+'  →', type='primary', key='hero_browse'):
         route('library')
-    stats = [(len(visible_courses), t['courses']), (len(visible), t['materials']),
-             (lectures, t['lectures']), (len(visible) - lectures, t['presentations'])]
-    st.markdown('<div class="stats">' + ''.join(f'<div><b data-count="{v}">{v:02d}</b><span>{esc(label)}</span></div>'
+    total_slides = sum(slides(m) for m in visible)
+    fresh_count = sum(bool(m.get('new')) for m in visible)
+    stats = [(len(visible_courses), plural(len(visible_courses), lang, 'courses')),
+             (len(visible), plural(len(visible), lang, 'materials'))]
+    stats += [(lectures, t['lectures']), (len(visible) - lectures, t['presentations'])] if mixed() else []
+    stats += [(total_slides, plural(total_slides, lang, 'slides'))] if total_slides else []
+    stats += [(fresh_count, t['new_week'])]
+    st.markdown('<div class="stats stats-auto">' + ''.join(f'<div><b data-count="{v}">{v:02d}</b><span>{esc(label)}</span></div>'
                                                 for v, label in stats) + '</div>', unsafe_allow_html=True)
+    slide_strip(sorted(visible, key=lambda m: m.get('new') or '', reverse=True), t['strip'])
     by_id = {m['id']: m for m in visible}
     recent = [by_id[i] for i in recent_ids() if i in by_id][:4]
     if recent:
         header(t['recent_title'], t['recent_sub'], '↺')
-        material_list(recent, lang, 'recent')
+        material_grid(recent[:3], lang, 'recent')
     fresh = sorted((m for m in visible if m.get('new')), key=lambda m: m['new'], reverse=True)
     if fresh:
         header(t['new_title'], t['new_sub'], '✦')
-        material_list(fresh[:4], lang, 'fresh')
+        material_grid(fresh[:3], lang, 'fresh')
     header(t['courses'], t['course_sub'], f'{len(visible_courses):02d}')
     if not visible_courses:
         empty(t['empty_courses'], t['empty_desc'])
@@ -474,8 +566,11 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
         lect = sum(m['kind'] == 'lectures' for m in own)
         fresh_count = sum(bool(m.get('new')) for m in own)
         studied = sum(is_done(m) for m in own)
-        if row('course_'+course['id'], n, display_course(course, lang), big=True,
-               sub=f'{lect} {t["lectures"]} · {len(own) - lect} {t["presentations"]}',
+        n_slides = sum(slides(m) for m in own)
+        sub = (f'{lect} {t["lectures"]} · {len(own) - lect} {t["presentations"]}' if mixed()
+               else f'{len(own)} {plural(len(own), lang, "pres")}' + (f' · {n_slides} {plural(n_slides, lang, "slides")}' if n_slides else ''))
+        first_cover = next((cover_url(m) for m in own if cover_url(m)), '')
+        if row('course_'+course['id'], n, display_course(course, lang), big=True, sub=sub, thumb=first_cover,
                extra=progress_bar(studied, len(own), t['studied']) if studied else '',
                meta=f'{course.get("icon", "")}', new=f'+{fresh_count} {t["new"]}' if fresh_count else '',
                button=t['open']+' →', button_key=f'course_{lang}_{course["id"]}'):
@@ -497,14 +592,17 @@ def course_page(config: dict, materials: list[dict], lang: str) -> None:
     groups = [(t['lectures_title'], [m for m in own if m['kind'] == 'lectures']),
               (t['presentations_title'], [m for m in own if m['kind'] == 'presentations'])]
     fresh = sum(bool(m.get('new')) for m in own)
-    facts = ''.join(f'<div><b>{len(items):02d}</b><span>{esc(title)}</span></div>' for title, items in groups)
+    n_slides = sum(slides(m) for m in own)
+    facts = (''.join(f'<div><b>{len(items):02d}</b><span>{esc(title)}</span></div>' for title, items in groups) if mixed()
+             else f'<div><b>{len(own):02d}</b><span>{esc(plural(len(own), lang, "pres"))}</span></div>')
+    facts += f'<div><b>{n_slides}</b><span>{esc(plural(n_slides, lang, "slides"))}</span></div>' if n_slides else ''
     facts += f'<div class="fact-new"><b>{fresh:02d}</b><span>{esc(t["new"])}</span></div>' if fresh else ''
     studied = sum(is_done(m) for m in own)
     facts += f'<div><b>{studied:02d}<small>/{len(own):02d}</small></b><span>{esc(t["studied_title"])}</span></div>'
     st.markdown(
         f'<section class="course-hero"><div class="hero-meta"><span>{index+1:02d} / {len(courses):02d}</span>'
         f'<span>{esc(LANG_LABELS[lang])}</span><span>{esc(course.get("icon", ""))}</span><span>{len(own)} {esc(t["materials"])}</span></div>'
-        f'<h1>{esc(display_course(course, lang))}<span class="dot">.</span></h1><div class="stats">{facts}</div>'
+        f'<h1>{words(display_course(course, lang))}<span class="dot">.</span></h1><div class="stats">{facts}</div>'
         f'{progress_bar(studied, len(own), t["studied"]) if own else ""}</section>',
         unsafe_allow_html=True,
     )
@@ -514,10 +612,14 @@ def course_page(config: dict, materials: list[dict], lang: str) -> None:
     if st.button(t['poster']+'  →', key='poster', type='secondary'):
         poster_dialog(poster_html(course, lang, groups[0][1] + groups[1][1], index + 1, len(courses)),
                       f'StudySpace-{course["id"]}-{lang}.html', t['poster_download'])
+    if not mixed():
+        st.markdown('<div class="grid-gap"></div>', unsafe_allow_html=True)
+        material_grid(groups[1][1], lang, 'course')
+        return
     for title, items in groups:
         if items:
             header(title, '', f'{len(items):02d}')
-            material_list(items, lang, 'course')
+            material_grid(items, lang, 'course')
 
 
 def empty(title: str, subtitle: str) -> None:
@@ -538,22 +640,24 @@ def library(config: dict, materials: list[dict], lang: str) -> None:
     if current not in options:
         current = 'all'
     with st.container(key='filters'):
-        a, b, c = st.columns([1.5, 1, 1], gap='medium')
+        a, b, *rest = st.columns([1.5, 1, 1] if mixed() else [1.5, 1], gap='medium')
         with a:
             query = st.text_input(t['search'], placeholder=t['search_hint'], key=f'catalog_search_{lang}')
         with b:
             selected_course = st.selectbox(t['subject'], options, index=options.index(current),
                                            format_func=lambda slug: t['all_subjects'] if slug == 'all' else display_course(next(c for c in courses if c['id'] == slug), lang),
                                            key=f'course_selector_{lang}')
-        with c:
-            kind = st.selectbox(t['kind'], ['all', 'lectures', 'presentations'],
-                                format_func=lambda key: {'all':t['all_kinds'], 'lectures':t['lectures_one'], 'presentations':t['presentations_one']}[key],
-                                key=f'kind_selector_{lang}')
+        kind = 'all'
+        if rest:
+            with rest[0]:
+                kind = st.selectbox(t['kind'], ['all', 'lectures', 'presentations'],
+                                    format_func=lambda key: {'all':t['all_kinds'], 'lectures':t['lectures_one'], 'presentations':t['presentations_one']}[key],
+                                    key=f'kind_selector_{lang}')
     query = query.strip().casefold()
     filtered = [m for m in materials if m['lang'] == lang and (selected_course == 'all' or m['course_id'] == selected_course)
                 and (kind == 'all' or m['kind'] == kind)
                 and (not query or query in (m['title']+' '+display_course(m['course'],lang)+' '+m['filename']).casefold())]
-    st.markdown(f'<div class="result-count"><b>{len(filtered):02d}</b> {esc(t["materials"])}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="result-count"><b>{len(filtered):02d}</b> {esc(plural(len(filtered), lang, "materials"))}</div>', unsafe_allow_html=True)
     if not filtered:
         empty(t['empty_materials'], t['course_sub'])
         return
@@ -587,9 +691,10 @@ def reader(materials: list[dict], lang: str) -> None:
     header(item['title'], '', f'{position + 1:02d}')
     view, side = st.columns([2.6, 1], gap='large')
     with side:
-        facts = [(t['f_course'], display_course(item['course'], lang)), (t['f_kind'], kind),
-                 (t['f_format'], item['extension'].lstrip('.').upper()), (t['f_size'], human_size(item['size'])),
-                 (t['f_lang'], LANG_LABELS[lang])]
+        facts = ([(t['f_course'], display_course(item['course'], lang))] + ([(t['f_kind'], kind)] if mixed() else [])
+                 + ([(t['f_slides'], str(slides(item)))] if slides(item) else [])
+                 + [(t['f_format'], item['extension'].lstrip('.').upper()), (t['f_size'], human_size(item['size'])),
+                    (t['f_lang'], LANG_LABELS[lang])])
         st.markdown('<dl class="facts">' + ''.join(f'<div><dt>{esc(k)}</dt><dd>{esc(v)}</dd></div>' for k, v in facts)
                     + (f'<div><dt>{esc(t["new"])}</dt><dd><span class="tag-new">{esc(item["new"])}</span></dd></div>' if item.get('new') else '')
                     + f'<div><dt>№</dt><dd>{position + 1:02d} / {len(siblings):02d}</dd></div></dl>', unsafe_allow_html=True)
@@ -700,10 +805,14 @@ def poster_html(course: dict, lang: str, items: list[dict], number: int, total: 
     title = display_course(course, lang)
     link = site_url(lang=lang, course=course['id'])
     lectures = sum(m['kind'] == 'lectures' for m in items)
-    rows = ''.join(
-        f'<li><span>{n:02d}</span><b>{esc(m["title"])}</b>'
-        f'<i>{esc(t["lectures_one"] if m["kind"] == "lectures" else t["presentations_one"])}</i></li>'
-        for n, m in enumerate(items[:POSTER_ROWS], 1))
+    def label(m: dict) -> str:
+        # Type only matters when lectures exist; otherwise the slide count is the useful detail.
+        if lectures:
+            return t['lectures_one'] if m['kind'] == 'lectures' else t['presentations_one']
+        return f'{slides(m)} {plural(slides(m), lang, "slides")}' if slides(m) else ''
+
+    rows = ''.join(f'<li><span>{n:02d}</span><b>{esc(m["title"])}</b><i>{esc(label(m))}</i></li>'
+                   for n, m in enumerate(items[:POSTER_ROWS], 1))
     more = f'<p class="more">+ {len(items) - POSTER_ROWS} {esc(t["materials"])}</p>' if len(items) > POSTER_ROWS else ''
     size = 84 if len(title) < 18 else 64 if len(title) < 32 else 48  # pt; long Kazakh titles must still fit
     return (
@@ -717,7 +826,9 @@ def poster_html(course: dict, lang: str, items: list[dict], number: int, total: 
         f'<div class="meta"><span class="brand">StudySpace<span class="red">■</span></span><span>{number:02d} / {total:02d}</span>'
         f'<span>{esc(LANG_LABELS[lang].split()[-1])}</span><span>2026</span></div>'
         f'<h1>{esc(title)}<span class="red">.</span></h1>'
-        f'<div class="facts">{lectures} {esc(t["lectures"])} · {len(items) - lectures} {esc(t["presentations"])}</div>'
+        + (f'<div class="facts">{lectures} {esc(t["lectures"])} · {len(items) - lectures} {esc(t["presentations"])}</div>' if lectures
+           else f'<div class="facts">{len(items)} {esc(plural(len(items), lang, "pres"))}</div>')
+        + ""
         f'<ol>{rows}</ol>{more}'
         f'<div class="foot"><img src="{qr_uri(link, 10)}" alt="QR"><div><b>{esc(t["poster_scan"])}</b>'
         f'<p>{esc(t["poster_hint"])}</p><small>{esc(link)}</small></div></div>'
@@ -859,8 +970,6 @@ def attention(config: dict, materials: list[dict]) -> list[str]:
             name = f'{display_course(course, lang)} · {lang.upper()}'
             if not own:
                 issues.append(f'{name} — нет материалов, студенты видят пустой раздел')
-            elif not any(m['kind'] == 'lectures' for m in own):
-                issues.append(f'{name} — {len(own)} файлов, но ни одной лекции (проверь тип во вкладке «Мои дисциплины»)')
         if not course_languages(course):
             issues.append(f'{course.get("title_ru") or course.get("title_kz") or course["id"]} — не выбран язык, предмет скрыт')
     return issues
@@ -870,8 +979,9 @@ def dashboard(config: dict, materials: list[dict]) -> None:
     lectures = sum(m['kind'] == 'lectures' for m in materials)
     fresh = sorted((m for m in materials if m.get('new')), key=lambda m: m['new'], reverse=True)
     by_lang = Counter(m['lang'] for m in materials)
-    stats = [(len(config['courses']), 'Дисциплины'), (lectures, 'Лекции'), (len(materials) - lectures, 'Презентации'),
-             (len(fresh), 'Новые за 7 дней')]
+    stats = [(len(config['courses']), 'Дисциплины'), (len(materials), 'Материалы')]
+    stats += [(lectures, 'Лекции')] if lectures else []
+    stats += [(sum(slides(m) for m in materials), 'Слайдов'), (len(fresh), 'Новые за 7 дней')]
     st.markdown('<div class="stats admin-stats">' + ''.join(f'<div><b data-count="{v}">{v:02d}</b><span>{esc(k)}</span></div>' for v, k in stats)
                 + f'</div><div class="lang-split"><span>RU {by_lang["ru"]}</span><i style="flex:{max(by_lang["ru"], 0.001)}"></i>'
                   f'<i class="kz" style="flex:{max(by_lang["kz"], 0.001)}"></i><span>KZ {by_lang["kz"]}</span></div>',
@@ -881,7 +991,7 @@ def dashboard(config: dict, materials: list[dict]) -> None:
     left, right = st.columns(2, gap='large')
     left.markdown(
         f'<div class="apanel"><span class="eyebrow">01</span><h4>Требует внимания</h4><ul>'
-        + (''.join(f'<li class="warn">{esc(i)}</li>' for i in issues) or '<li class="ok">Всё в порядке: у каждого раздела есть лекции.</li>')
+        + (''.join(f'<li class="warn">{esc(i)}</li>' for i in issues) or '<li class="ok">Всё в порядке: в каждом разделе есть материалы.</li>')
         + '</ul></div>', unsafe_allow_html=True)
     right.markdown(
         f'<div class="apanel"><span class="eyebrow">02</span><h4>Загружено за 7 дней</h4><ul>'
@@ -1004,7 +1114,7 @@ def admin(config: dict, materials: list[dict]) -> None:
                     language = st.radio('Язык материала *', allowed_languages,
                                         format_func=lambda v: LANG_LABELS[v], horizontal=True,
                                         key=f'upload_language_choice_{course["id"]}')
-                    kind = st.radio('Что загружаем? *', ['lectures', 'presentations'],
+                    kind = st.radio('Что загружаем? *', ['lectures', 'presentations'], index=1,
                                     format_func=lambda k: '📖 Лекция' if k == 'lectures' else '🖥 Презентация', horizontal=True)
                     files = st.file_uploader('Добавить файлы', accept_multiple_files=True,
                                              type=[s[1:] for s in sorted(ALLOWED_EXTENSIONS)],
@@ -1150,11 +1260,21 @@ def fulltext_index() -> FullText:
     return FullText(BASE / 'static' / 'fulltext.json')
 
 
+def start_index(config: dict, materials: list[dict]) -> None:
+    """Text, slide counts and covers for every file students can open, built in the background."""
+    repo, branch, _ = settings()
+    docs = [{'u': '?'+urlencode({'lang': m['lang'], 'material': m['id']}), 'path': m['path'], 'sha': m['sha'],
+             'extension': m['extension']}
+            for c in config['courses'] for m in materials
+            if m['course_id'] == c['id'] and m['lang'] in course_languages(c)]
+    fulltext_index().refresh(docs, lambda path, sha: GithubStore(repo, branch).raw_bytes(path, sha))
+
+
 def search_index(config: dict, materials: list[dict]) -> None:
     """Hidden JSON for the client-side search palette in fx.js: only what students can already open."""
     lang = st.session_state.get('lang', '')
     t = I18N.get(lang, I18N['ru'])
-    entries, by_url = [], {}
+    entries = []
     for code in LANG_LABELS:
         tl = I18N[code]
         courses = [c for c in config['courses'] if code in course_languages(c)]
@@ -1164,12 +1284,6 @@ def search_index(config: dict, materials: list[dict]) -> None:
         entries += [{'k': tl['lectures_one'] if m['kind'] == 'lectures' else tl['presentations_one'], 't': m['title'],
                      's': display_course(m['course'], code), 'l': code, 'u': '?'+urlencode({'lang': code, 'material': m['id']})}
                     for m in materials if m['lang'] == code and m['course_id'] in ids]
-        by_url.update({'?'+urlencode({'lang': code, 'material': m['id']}): m for m in materials if m['lang'] == code})
-    repo, branch, _ = settings()
-    listed = {e['u'] for e in entries}  # only what students can open, same as the palette
-    docs = [{'u': u, 'path': m['path'], 'sha': m['sha'], 'extension': m['extension']}
-            for u, m in by_url.items() if u in listed]
-    fulltext_index().refresh(docs, lambda path, sha: GithubStore(repo, branch).raw_bytes(path, sha))
     st.markdown(f'<div id="ss-index" hidden data-lang="{esc(lang)}" data-ph="{esc(t["search_ph"])}" '
                 f'data-ft="app/static/fulltext.json" data-in-text="{esc(t["in_text"])}" data-top="{esc(t["to_top"])}" '
                 f'data-empty="{esc(t["search_empty"])}" data-items="{esc(json.dumps(entries, ensure_ascii=False))}"></div>',
@@ -1200,6 +1314,8 @@ def main() -> None:
     effects()
     config, materials, error = retrieve()
     initial_route(materials)
+    st.session_state['mixed'] = any(m['kind'] == 'lectures' for m in materials)
+    start_index(config, materials)
     topnav()
     page = st.session_state.get('page', 'welcome')
     lang = st.session_state.get('lang', '')
@@ -1210,7 +1326,7 @@ def main() -> None:
     if page == 'admin':
         admin(config, materials)
     elif page == 'welcome' or lang not in LANG_LABELS:
-        welcome()
+        welcome(materials)
     elif page == 'home':
         home(config, materials, lang)
     elif page == 'library':
@@ -1222,7 +1338,7 @@ def main() -> None:
     elif page == 'about':
         about(lang)
     else:
-        welcome()
+        welcome(materials)
     footer()
     search_index(config, materials)
     # fx.js copies this into the ss_done cookie, so marks survive the next visit.

@@ -38,7 +38,7 @@ def test_mark_as_studied_and_progress(gh):
     assert len(at.session_state['done']) == 1
     at.session_state['page'] = 'course'
     page = html_of(ok(at))
-    assert page.count('class="row is-done"') == 1 and 'Изучено' in page and '1/3 изучено' in page
+    assert page.count('class="card-badge done"') == 1 and 'Изучено' in page and '1/3 изучено' in page
     # Toggling again removes the mark.
     at.session_state['page'] = 'reader'
     ok(at)
@@ -48,17 +48,16 @@ def test_mark_as_studied_and_progress(gh):
 
 def test_fresh_visitor_has_nothing_studied(gh):
     page = html_of(ok(app('course', 'ru', course='algo')))
-    assert 'class="row is-done"' not in page and '0/3 изучено' in page
+    assert 'class="card-badge done"' not in page and '0/3 изучено' in page
 
 
 # ---------- admin dashboard ----------
-def test_attention_lists_empty_and_lecture_less_sections():
+def test_attention_flags_empty_sections_only():
     import app as site
     config = {'courses': [{'id': 'a', 'title_ru': 'A', 'languages': ['ru', 'kz'], 'title_kz': 'A'}]}
     materials = [{'course_id': 'a', 'lang': 'ru', 'kind': 'presentations'}]
     issues = site.attention(config, materials)
-    assert any('RU' in i and 'ни одной лекции' in i for i in issues)
-    assert any('KZ' in i and 'нет материалов' in i for i in issues)
+    assert issues == [i for i in issues if 'KZ' in i] and any('нет материалов' in i for i in issues)  # presentations-only is fine
 
 
 def test_dashboard_renders(gh):

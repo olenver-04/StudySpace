@@ -5,4 +5,5 @@ __pycache__/
 .DS_Store
 # generated at runtime by fulltext.py
 static/fulltext.json
+static/thumbs/
 static/*.tmp

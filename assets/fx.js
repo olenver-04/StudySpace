@@ -54,7 +54,7 @@
     // A click anywhere on an index row or a language panel acts like its button.
     document.addEventListener('click', function (e) {
       if (!e.target.closest) return;
-      var row = e.target.closest('[class*="st-key-row_"], [class*="st-key-langpanel_"]');
+      var row = e.target.closest('[class*="st-key-row_"], [class*="st-key-langpanel_"], [class*="st-key-card_"]');
       if (!row || e.target.closest('button, a, input, textarea, select, [role="button"]')) return;
       if (window.getSelection && String(window.getSelection())) return;  // let people select text
       var btn = row.querySelector('[data-testid="stButton"] button');
