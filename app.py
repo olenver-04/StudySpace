@@ -66,7 +66,7 @@ I18N = {
         'nav_home':'Главная', 'nav_admin':'Преподавателю',
         'studied':'изучено', 'studied_title':'Изучено', 'mark_done':'✓  Отметить как изученное',
         'unmark_done':'✓  Изучено · снять отметку', 'in_text':'В тексте',
-        'slides_loading':'Готовим слайды…', 'fullscreen':'На весь экран', 'slide_word':'слайд', 'deck_hint':'← → или свайп',
+        'slides_loading':'Готовим слайды…', 'copy':'Копировать', 'copied':'Скопировано ✓', 'fullscreen':'На весь экран', 'slide_word':'слайд', 'deck_hint':'← → или свайп',
         'new_week':'новых за неделю', 'f_slides':'Слайдов', 'strip':'Лента слайдов',
         'theme':'Светлая / тёмная тема', 'menu':'Меню', 'to_top':'Наверх',
         'search_open':'Поиск', 'search_ph':'Найти предмет или материал…', 'search_empty':'Ничего не найдено',
@@ -82,7 +82,7 @@ I18N = {
         'back_home':'← Ко всем предметам', 'back_course':'← К предмету',
         'lectures_title':'Лекции', 'presentations_title':'Презентации',
         'share':'ПОДЕЛИТЬСЯ', 'share_title':'Ссылка на этот материал', 'qr_big':'⛶  QR на весь экран',
-        'share_hint':'Отсканируй QR-код телефоном или скопируй ссылку кнопкой справа от неё.',
+        'share_hint':'Отсканируй QR-код телефоном или скопируй ссылку.',
     },
     'kz': {
         'home':'Бөлім', 'landing':'Басты бет', 'library':'Кітапхана', 'about':'Платформа туралы', 'choose':'Тілді таңдау',
@@ -107,7 +107,7 @@ I18N = {
         'nav_home':'Басты бет', 'nav_admin':'Оқытушыға',
         'studied':'оқылды', 'studied_title':'Оқылды', 'mark_done':'✓  Оқылды деп белгілеу',
         'unmark_done':'✓  Оқылды · белгіні алу', 'in_text':'Мәтінде',
-        'slides_loading':'Слайдтар дайындалуда…', 'fullscreen':'Толық экран', 'slide_word':'слайд', 'deck_hint':'← → немесе свайп',
+        'slides_loading':'Слайдтар дайындалуда…', 'copy':'Көшіру', 'copied':'Көшірілді ✓', 'fullscreen':'Толық экран', 'slide_word':'слайд', 'deck_hint':'← → немесе свайп',
         'new_week':'аптадағы жаңа', 'f_slides':'Слайд', 'strip':'Слайдтар таспасы',
         'theme':'Ашық / қараңғы режим', 'menu':'Мәзір', 'to_top':'Жоғары',
         'search_open':'Іздеу', 'search_ph':'Пән немесе материал іздеу…', 'search_empty':'Ештеңе табылмады',
@@ -123,7 +123,7 @@ I18N = {
         'back_home':'← Барлық пәндерге', 'back_course':'← Пәнге оралу',
         'lectures_title':'Дәрістер', 'presentations_title':'Презентациялар',
         'share':'БӨЛІСУ', 'share_title':'Осы материалға сілтеме', 'qr_big':'⛶  QR-код толық экранда',
-        'share_hint':'QR-кодты телефонмен сканерле немесе сілтемені оның оң жағындағы батырмамен көшір.',
+        'share_hint':'QR-кодты телефонмен сканерле немесе сілтемені көшір.',
     },
 }
 
@@ -910,8 +910,11 @@ def share(item: dict, t: dict) -> None:
     with st.container(key='share'):
         st.markdown(f'<div class="share-card"><img class="share-qr" src="{qr_uri(link, 5)}" alt="QR">'
                     f'<div><span class="eyebrow">{esc(t["share"])}</span><b>{esc(t["share_title"])}</b>'
-                    f'<p>{esc(t["share_hint"])}</p></div></div>', unsafe_allow_html=True)
-        st.code(link, language=None)
+                    f'<p>{esc(t["share_hint"])}</p></div></div>'
+                    # fx.js copies data-copy to the clipboard and flips the label to data-done.
+                    f'<div class="sharelink"><input type="text" readonly value="{esc(link)}" aria-label="{esc(t["share_title"])}">'
+                    f'<button class="ss-copy" type="button" data-copy="{esc(link)}" data-done="{esc(t["copied"])}">'
+                    f'{esc(t["copy"])}</button></div>', unsafe_allow_html=True)
         if st.button(t['qr_big'], key='qr_big', use_container_width=True):
             qr_dialog(link, item['title'])
 

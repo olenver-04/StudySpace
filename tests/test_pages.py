@@ -24,7 +24,7 @@ def test_public_pages(gh, lang):
 def test_reader_every_format(gh, name):
     lang = name.split('/')[1]
     at = ok(app('reader', lang, course=name.split('/')[0], material=U + name))
-    assert at.code, 'share link block is missing'
+    assert 'class="ss-copy"' in html_of(at), 'share link block is missing'
 
 
 def test_uploaded_html_is_isolated(gh):

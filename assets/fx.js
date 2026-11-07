@@ -51,6 +51,28 @@
       document.cookie = 'ss_theme=' + (dark ? 'light' : 'dark') + '; path=/; max-age=63072000; SameSite=Lax';
     });
 
+    // Copy-link buttons: clipboard API, with a select-and-copy fallback for older browsers.
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.ss-copy');
+      if (!btn) return;
+      var text = btn.getAttribute('data-copy'), label = btn.textContent;
+      function done() {
+        btn.textContent = btn.getAttribute('data-done');
+        btn.classList.add('ok');
+        setTimeout(function () { btn.textContent = label; btn.classList.remove('ok'); }, 1800);
+      }
+      function fallback() {
+        var input = btn.parentElement.querySelector('input');
+        input.select();
+        try { document.execCommand('copy'); done(); } catch (err) { /* the text stays selected for Ctrl+C */ }
+      }
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback);
+      else fallback();
+    });
+    document.addEventListener('focusin', function (e) {  // one tap on the field selects the whole link
+      if (e.target.matches && e.target.matches('.sharelink input')) e.target.select();
+    });
+
     // ---------- Slide viewer (markup comes from deck() in app.py) ----------
     function current(deck) { return +(deck.dataset.i || deck.dataset.start || 1); }
     function show(deck, i) {

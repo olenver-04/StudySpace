@@ -666,3 +666,14 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 @media (hover: none) {
   .deck-nav {opacity: .8}
 }
+
+/* ---------- Share link field (replaces st.code, which kept light-theme colours in dark mode) ---------- */
+.sharelink {display: flex; margin-top: 14px; border: 1px solid var(--ink); width: 100%}
+.sharelink input {flex: 1; min-width: 0; border: 0; outline: 0; background: var(--white); color: var(--ink); padding: 10px 12px; font: 12px var(--mono); text-overflow: ellipsis}
+.ss-copy {flex: none; border: 0; border-left: 1px solid var(--ink); background: var(--ink); color: var(--paper); padding: 0 14px; font: 600 13px var(--text); cursor: pointer; transition: background .15s ease}
+.ss-copy:hover {background: var(--accent, var(--red)); color: #fff}
+.ss-copy.ok {background: var(--accent, var(--red)); color: #fff}
+.ss-copy:focus-visible {outline: 2px solid var(--red); outline-offset: 2px}
+/* Remaining code blocks (admin): Streamlit's syntax colours are light-theme only; keep them readable. */
+[data-testid="stCode"] code, [data-testid="stCode"] code span, [data-testid="stCodeBlock"] code span {color: var(--ink) !important}
+[data-testid="stCode"] pre, [data-testid="stCodeBlock"] pre {background: var(--white) !important}
