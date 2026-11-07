@@ -376,7 +376,7 @@ html, body {-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: graysc
 .fcols p {margin: 0; font-size: 14px; line-height: 1.6; color: var(--ink-2)}
 /* The wordmark is ~5.2x its font size wide; container units make it fill the footer width exactly. */
 .footer-big {container-type: inline-size}
-.wordmark {padding-bottom: .07em}
+.wordmark {padding-bottom: .2em}  /* room for the descender of "y" above the bottom rule */
 .wordmark {margin: 72px 0 0 -0.04em; font: 800 15vw/.78 var(--display); font-size: 18.8cqi; letter-spacing: -.07em; color: var(--ink); white-space: nowrap; user-select: none}
 .wordmark span {color: var(--red); font-size: .32em; vertical-align: .9em; margin-left: .02em}
 .fbottom {display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 18px; border-top: 1px solid var(--rule); padding: 12px 0 6px; font: 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2)}
@@ -677,3 +677,12 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 /* Remaining code blocks (admin): Streamlit's syntax colours are light-theme only; keep them readable. */
 [data-testid="stCode"] code, [data-testid="stCode"] code span, [data-testid="stCodeBlock"] code span {color: var(--ink) !important}
 [data-testid="stCode"] pre, [data-testid="stCodeBlock"] pre {background: var(--white) !important}
+
+/* ---------- Author credit in the footer ---------- */
+.fbottom {align-items: baseline}
+.credit {display: inline-flex; align-items: baseline; gap: 8px}
+.credit b {font: 800 15px var(--display); letter-spacing: -.03em; text-transform: none; color: var(--ink)}
+.credit i {font-style: normal; color: var(--red); font-size: .6em; margin-left: 2px; vertical-align: .45em}
+@media (max-width: 640px) {
+  .fbottom {flex-direction: column; gap: 6px}
+}
