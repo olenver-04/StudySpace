@@ -681,8 +681,7 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 /* ---------- Author credit in the footer ---------- */
 .fbottom {align-items: baseline}
 .credit {display: inline-flex; align-items: baseline; gap: 8px}
-.credit b {font: 800 15px var(--display); letter-spacing: -.03em; text-transform: none; color: var(--ink)}
-.credit i {font-style: normal; color: var(--red); font-size: .6em; margin-left: 2px; vertical-align: .45em}
+.credit b {font: 800 16px var(--display); letter-spacing: -.03em; text-transform: none; color: var(--red)}
 @media (max-width: 640px) {
   .fbottom {flex-direction: column; gap: 6px}
 }
