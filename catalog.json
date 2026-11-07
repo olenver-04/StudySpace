@@ -27,6 +27,16 @@
       "languages": [
         "ru"
       ]
+    },
+    {
+      "id": "algoritmizatsiya-i-programmirovanie",
+      "title_ru": "Алгоритмизация и программирование",
+      "title_kz": "Алгоритмдеу және бағдарламау",
+      "icon": "💻",
+      "languages": [
+        "ru",
+        "kz"
+      ]
     }
   ]
 }
