@@ -13,16 +13,53 @@
   function main() {
     var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // Reading progress bar for the main scroll area.
+    // Reading progress bar and a back-to-top button for the main scroll area.
     var bar = document.createElement('div');
     bar.id = 'ss-progress';
     document.body.appendChild(bar);
+    var top = document.createElement('button');
+    top.id = 'ss-top';
+    top.type = 'button';
+    top.textContent = '↑';
+    document.body.appendChild(top);
+    var scroller = null;
     document.addEventListener('scroll', function (e) {
       var el = e.target === document ? document.scrollingElement : e.target;
       if (!el || !el.querySelector || !(el === document.scrollingElement || el.querySelector('[data-testid="stMainBlockContainer"]'))) return;
+      scroller = el;
       var max = el.scrollHeight - el.clientHeight;
       bar.style.transform = 'scaleX(' + (max > 0 ? el.scrollTop / max : 0) + ')';
+      top.classList.toggle('show', el.scrollTop > 900);
     }, true);
+    top.addEventListener('click', function () {
+      if (scroller) scroller.scrollTo({top: 0, behavior: reduce ? 'auto' : 'smooth'});
+      top.blur();
+    });
+    setInterval(function () {  // label follows the page language
+      var idx = document.getElementById('ss-index');
+      var text = idx && idx.getAttribute('data-top');
+      if (text && top.getAttribute('aria-label') !== text) { top.setAttribute('aria-label', text); top.title = text; }
+    }, 1000);
+
+    // Theme: the server already applied a saved choice; this flips it instantly and saves it for next time.
+    document.addEventListener('click', function (e) {
+      if (!(e.target.closest && e.target.closest('.ss-theme'))) return;
+      var root = document.documentElement;
+      var dark = getComputedStyle(root).getPropertyValue('--paper').trim().toLowerCase() === '#0f0f0e';
+      root.classList.remove('ss-dark', 'ss-light');
+      root.classList.add(dark ? 'ss-light' : 'ss-dark');
+      document.cookie = 'ss_theme=' + (dark ? 'light' : 'dark') + '; path=/; max-age=63072000; SameSite=Lax';
+    });
+
+    // A click anywhere on an index row or a language panel acts like its button.
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest) return;
+      var row = e.target.closest('[class*="st-key-row_"], [class*="st-key-langpanel_"]');
+      if (!row || e.target.closest('button, a, input, textarea, select, [role="button"]')) return;
+      if (window.getSelection && String(window.getSelection())) return;  // let people select text
+      var btn = row.querySelector('[data-testid="stButton"] button');
+      if (btn) btn.click();
+    });
 
     // Streamlit keeps the scroll position between "pages"; jump to the top when the address changes.
     var lastSearch = location.search;

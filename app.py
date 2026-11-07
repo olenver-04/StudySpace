@@ -63,6 +63,7 @@ I18N = {
         'nav_home':'Главная', 'nav_admin':'Преподавателю',
         'studied':'изучено', 'studied_title':'Изучено', 'mark_done':'✓  Отметить как изученное',
         'unmark_done':'✓  Изучено · снять отметку', 'in_text':'В тексте',
+        'theme':'Светлая / тёмная тема', 'menu':'Меню', 'to_top':'Наверх',
         'search_open':'Поиск', 'search_ph':'Найти предмет или материал…', 'search_empty':'Ничего не найдено',
         'course_word':'Предмет', 'prev':'Предыдущий', 'next':'Следующий',
         'f_course':'Предмет', 'f_kind':'Тип', 'f_format':'Формат', 'f_size':'Размер', 'f_lang':'Язык',
@@ -101,6 +102,7 @@ I18N = {
         'nav_home':'Басты бет', 'nav_admin':'Оқытушыға',
         'studied':'оқылды', 'studied_title':'Оқылды', 'mark_done':'✓  Оқылды деп белгілеу',
         'unmark_done':'✓  Оқылды · белгіні алу', 'in_text':'Мәтінде',
+        'theme':'Ашық / қараңғы режим', 'menu':'Мәзір', 'to_top':'Жоғары',
         'search_open':'Іздеу', 'search_ph':'Пән немесе материал іздеу…', 'search_empty':'Ештеңе табылмады',
         'course_word':'Пән', 'prev':'Алдыңғы', 'next':'Келесі',
         'f_course':'Пән', 'f_kind':'Түрі', 'f_format':'Формат', 'f_size':'Көлемі', 'f_lang':'Тілі',
@@ -227,8 +229,35 @@ def route(page: str, *, lang: str | None = None, course: str = '', material: str
     st.rerun()
 
 
+THEMES = {
+    'light': 'color-scheme: light; --paper: #F4F2EE; --paper-2: #EAE7E1; --white: #FFFFFF; --ink: #111111; --ink-2: #3A3A3A; '
+             '--muted: #6E6B66; --rule: #111111; --rule-soft: #CFCAC2; --red: #E3241B;',
+    'dark': 'color-scheme: dark; --paper: #0F0F0E; --paper-2: #1A1918; --white: #171615; --ink: #F1EEE8; --ink-2: #C9C5BE; '
+            '--muted: #8F8A83; --rule: #F1EEE8; --rule-soft: #34322F; --red: #FF4136;',
+}
+
+
+def theme_css(saved: object) -> str:
+    """System preference by default; a saved choice (cookie) is applied server-side so there is no flash.
+
+    fx.js flips .ss-dark / .ss-light on <html> for an instant switch; those classes beat the rules below.
+    """
+    dark, light = THEMES['dark'], THEMES['light']
+    css = (f'@media (prefers-color-scheme: dark) {{:root:not(.ss-light) {{{dark}}}}} '
+           f':root.ss-dark {{{dark}}} :root.ss-light {{{light}}} ')
+    if saved == 'dark':
+        css += f':root:not(.ss-light) {{{dark}}}'
+    elif saved == 'light':
+        css += f':root:not(.ss-dark) {{{light}}}'
+    return css
+
+
 def style() -> None:
-    st.markdown('<style>'+(BASE/'assets/style.css').read_text(encoding='utf-8')+'</style>', unsafe_allow_html=True)
+    try:
+        saved = st.context.cookies.get('ss_theme')
+    except Exception:
+        saved = None
+    st.markdown('<style>'+(BASE/'assets/style.css').read_text(encoding='utf-8')+theme_css(saved)+'</style>', unsafe_allow_html=True)
 
 
 def effects() -> None:
@@ -284,20 +313,29 @@ def topnav() -> None:
     links.append(('admin', t['nav_admin']))
     other = {'ru': 'kz', 'kz': 'ru'}.get(lang)
     with st.container(key='topnav'):
-        cols = st.columns([3.2, 1.4] + [1] * len(links) + [0.7], vertical_alignment='center', gap='small')
+        # brand | search | links (desktop) | theme | language | menu (phones)
+        cols = st.columns([3.2, 1.4] + [1] * len(links) + [0.35, 0.7, 0.7], vertical_alignment='center', gap='small')
         if cols[0].button('StudySpace', type='tertiary', key='nav-brand'):
             route('welcome', lang='')
-        # Opened by fx.js (click, "/" or Ctrl/Cmd+K); a plain HTML button, so no Streamlit rerun.
+        # Search and theme are plain HTML buttons handled by fx.js, so they never cause a Streamlit rerun.
         cols[1].markdown(f'<button class="ss-search" type="button" aria-label="{esc(t["search_open"])}">'
-                         f'<span>{esc(t["search_open"])}</span><kbd>/</kbd></button>', unsafe_allow_html=True)
+                         f'<span class="ss-search-label">{esc(t["search_open"])}</span><span class="ss-search-icon" aria-hidden="true">⌕</span>'
+                         f'<kbd>/</kbd></button>', unsafe_allow_html=True)
         for col, (target, label) in zip(cols[2:], links):
-            if col.button(label, type='primary' if current == target else 'tertiary', key='nav-'+target):
-                route(target)
-        if cols[-1].button(other.upper() if other else 'RU/KZ', key='nav-lang', help=t['change_lang']):
+            with col, st.container(key='navlink-'+target):
+                if st.button(label, type='primary' if current == target else 'tertiary', key='nav-'+target):
+                    route(target)
+        cols[-3].markdown(f'<button class="ss-theme" type="button" aria-label="{esc(t["theme"])}" title="{esc(t["theme"])}">'
+                          '<span aria-hidden="true">◐</span></button>', unsafe_allow_html=True)
+        if cols[-2].button(other.upper() if other else 'RU/KZ', key='nav-lang', help=t['change_lang']):
             if other:
                 route('home', lang=other)
             else:
                 route('welcome', lang='')
+        with cols[-1], st.container(key='nav-menu'), st.popover(t['menu'], use_container_width=True):
+            for target, label in links:
+                if st.button(('● ' if current == target else '')+label, key='menu-'+target, type='tertiary', use_container_width=True):
+                    route(target)
 
 
 def row(key: str, number: int, title: str, *, kicker: str = '', sub: str = '', meta: str = '',
@@ -1133,7 +1171,7 @@ def search_index(config: dict, materials: list[dict]) -> None:
             for u, m in by_url.items() if u in listed]
     fulltext_index().refresh(docs, lambda path, sha: GithubStore(repo, branch).raw_bytes(path, sha))
     st.markdown(f'<div id="ss-index" hidden data-lang="{esc(lang)}" data-ph="{esc(t["search_ph"])}" '
-                f'data-ft="app/static/fulltext.json" data-in-text="{esc(t["in_text"])}" '
+                f'data-ft="app/static/fulltext.json" data-in-text="{esc(t["in_text"])}" data-top="{esc(t["to_top"])}" '
                 f'data-empty="{esc(t["search_empty"])}" data-items="{esc(json.dumps(entries, ensure_ascii=False))}"></div>',
                 unsafe_allow_html=True)
 
