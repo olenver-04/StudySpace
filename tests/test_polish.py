@@ -41,3 +41,4 @@ def test_first_material_has_no_prev(gh):
 def test_welcome_panels_and_footer(gh):
     page = html_of(ok(app('welcome')))
     assert 'langpanel' in page and 'wordmark' in page and 'ss-search' in page
+    assert 'class="credit-name"' in page and '>denver<' in page  # author credit (easter egg in fx.js)

@@ -1384,7 +1384,7 @@ def footer() -> None:
         f'<div><span>{esc(t["f_keys"])}</span><p>{esc(t["f_keys_hint"])}</p></div></div>'
         '<div class="wordmark" aria-hidden="true">StudySpace<span>■</span></div>'
         f'<div class="fbottom"><span>© 2026 StudySpace</span>'
-        '<span class="credit">Created by <b>denver</b></span>'
+        '<span class="credit">Created by <button class="credit-name" type="button" title="?">denver</button></span>'
         f'<span>{esc(t["f_made"])}</span></div></footer>',
         unsafe_allow_html=True,
     )

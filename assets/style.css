@@ -681,7 +681,16 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 /* ---------- Author credit in the footer ---------- */
 .fbottom {align-items: baseline}
 .credit {display: inline-flex; align-items: baseline; gap: 8px}
-.credit b {font: 800 16px var(--display); letter-spacing: -.03em; text-transform: none; color: var(--red)}
+.credit-name {font: 800 16px var(--display); letter-spacing: -.03em; text-transform: none; color: var(--red); background: none; border: 0; padding: 0; cursor: pointer; display: inline-block; transition: transform .2s cubic-bezier(.3,1.6,.5,1)}
+.credit-name:hover {transform: translateY(-2px) rotate(-3deg)}
+.credit-name:focus-visible {outline: 2px solid var(--red); outline-offset: 3px}
+.credit-name.pop {animation: nickpop .5s cubic-bezier(.3,1.6,.5,1)}
+@keyframes nickpop {30% {transform: scale(1.35) rotate(-6deg)} 60% {transform: scale(.92) rotate(3deg)}}
+.ss-bit {position: fixed; z-index: 1000005; pointer-events: none; width: 9px; height: 9px}
 @media (max-width: 640px) {
   .fbottom {flex-direction: column; gap: 6px}
 }
+/* Wordmark while it spells the author name (easter egg in fx.js). */
+.wordmark.egg {color: var(--red)}
+.wordmark.egg span {color: var(--ink)}
+.wordmark {transition: color .3s ease}

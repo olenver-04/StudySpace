@@ -51,6 +51,72 @@
       document.cookie = 'ss_theme=' + (dark ? 'light' : 'dark') + '; path=/; max-age=63072000; SameSite=Lax';
     });
 
+    // ---------- Easter egg: the author's nickname in the footer ----------
+    // Square confetti bursts from "denver" and the giant StudySpace wordmark scrambles into the name and back.
+    var eggBusy = false;
+    function burst(from) {
+      var r = from.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      var css = getComputedStyle(document.documentElement);
+      var colors = [css.getPropertyValue('--red'), css.getPropertyValue('--ink'), css.getPropertyValue('--rule-soft'), css.getPropertyValue('--red')];
+      for (var n = 0; n < 46; n++) {
+        var bit = document.createElement('i');
+        bit.className = 'ss-bit';
+        bit.style.left = x + 'px';
+        bit.style.top = y + 'px';
+        bit.style.background = colors[n % colors.length].trim();
+        var size = 5 + Math.random() * 9;
+        bit.style.width = bit.style.height = size + 'px';
+        document.body.appendChild(bit);
+        var angle = -Math.PI / 2 + (Math.random() - .5) * Math.PI * 1.3, speed = 160 + Math.random() * 260;
+        var dx = Math.cos(angle) * speed, dy = Math.sin(angle) * speed, fall = 260 + Math.random() * 220;
+        var spin = (Math.random() - .5) * 900;
+        bit.animate([
+          {transform: 'translate(-50%,-50%) rotate(0deg)', opacity: 1},
+          {transform: 'translate(calc(-50% + ' + dx * .7 + 'px), calc(-50% + ' + dy * .7 + 'px)) rotate(' + spin * .6 + 'deg)', opacity: 1, offset: .45},
+          {transform: 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + (dy + fall) + 'px)) rotate(' + spin + 'deg)', opacity: 0}
+        ], {duration: 1300 + Math.random() * 700, easing: 'cubic-bezier(.2,.7,.4,1)'}).onfinish = (function (el) {
+          return function () { el.remove(); };
+        })(bit);
+      }
+    }
+    function scramble(node, target, done) {
+      // Each frame, letters left of the "settled" edge are final; the rest are random glyphs.
+      var glyphs = 'ABCDEFGHJKLMNPRSTUVWXYZabcdefghkmnprstuvwxyz0123456789#%&*+=?', from = node.textContent;
+      var length = Math.max(from.length, target.length), frame = 0, frames = 26;
+      (function step() {
+        var settled = Math.floor(frame / frames * length), out = '';
+        for (var k = 0; k < length; k++) {
+          if (k < settled) out += target[k] || '';
+          else if (k < target.length || k < from.length - frame / 3) out += glyphs[Math.floor(Math.random() * glyphs.length)];
+        }
+        node.textContent = out;
+        // setTimeout, not requestAnimationFrame: rAF stops in background tabs and the name would stay forever.
+        if (++frame <= frames) setTimeout(step, 33);
+        else { node.textContent = target; if (done) done(); }
+      })();
+    }
+    document.addEventListener('click', function (e) {
+      var nick = e.target.closest && e.target.closest('.credit-name');
+      if (!nick || eggBusy) return;
+      eggBusy = true;
+      nick.classList.remove('pop'); void nick.offsetWidth; nick.classList.add('pop');
+      var mark = document.querySelector('.wordmark'), text = mark && mark.firstChild;
+      if (!reduce) burst(nick);
+      if (!text || text.nodeType !== 3) { setTimeout(function () { eggBusy = false; }, 1500); return; }
+      var original = text.textContent;
+      mark.classList.add('egg');
+      if (reduce) {
+        text.textContent = 'denver';
+        setTimeout(function () { text.textContent = original; mark.classList.remove('egg'); eggBusy = false; }, 2500);
+        return;
+      }
+      scramble(text, 'denver', function () {
+        setTimeout(function () {
+          scramble(text, original, function () { mark.classList.remove('egg'); eggBusy = false; });
+        }, 2600);
+      });
+    });
+
     // Copy-link buttons: clipboard API, with a select-and-copy fallback for older browsers.
     document.addEventListener('click', function (e) {
       var btn = e.target.closest && e.target.closest('.ss-copy');
