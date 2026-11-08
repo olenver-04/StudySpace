@@ -72,8 +72,6 @@ I18N = {
         'search_open':'Поиск', 'search_ph':'Найти предмет или материал…', 'search_empty':'Ничего не найдено',
         'course_word':'Предмет', 'prev':'Предыдущий', 'next':'Следующий',
         'f_course':'Предмет', 'f_kind':'Тип', 'f_format':'Формат', 'f_size':'Размер', 'f_lang':'Язык',
-        'f_sections':'Разделы', 'f_langs':'Языки', 'f_formats':'Форматы', 'f_keys':'Поиск',
-        'f_keys_hint':'Нажми / или Ctrl K в любом месте сайта', 'f_made':'Сделано для учёбы',
         'poster':'Плакат A4 с QR-кодом', 'poster_download':'↓ Скачать плакат (HTML)', 'print':'Печать / PDF',
         'poster_scan':'Все материалы — по QR-коду',
         'poster_hint':'Наведи камеру телефона на код, чтобы открыть лекции и презентации этого предмета.',
@@ -113,8 +111,6 @@ I18N = {
         'search_open':'Іздеу', 'search_ph':'Пән немесе материал іздеу…', 'search_empty':'Ештеңе табылмады',
         'course_word':'Пән', 'prev':'Алдыңғы', 'next':'Келесі',
         'f_course':'Пән', 'f_kind':'Түрі', 'f_format':'Формат', 'f_size':'Көлемі', 'f_lang':'Тілі',
-        'f_sections':'Бөлімдер', 'f_langs':'Тілдер', 'f_formats':'Форматтар', 'f_keys':'Іздеу',
-        'f_keys_hint':'Кез келген жерде / немесе Ctrl K бас', 'f_made':'Оқу үшін жасалған',
         'poster':'QR-коды бар A4 плакат', 'poster_download':'↓ Плакатты жүктеу (HTML)', 'print':'Басып шығару / PDF',
         'poster_scan':'Барлық материал — QR-код арқылы',
         'poster_hint':'Осы пәннің дәрістері мен презентацияларын ашу үшін телефон камерасын кодқа бағытта.',
@@ -505,8 +501,7 @@ def material_list(items: list[dict], lang: str, prefix: str) -> None:
 
 def welcome(materials: list[dict] | None = None) -> None:
     st.markdown(
-        '<section class="hero"><div class="hero-meta"><span>StudySpace</span><span>Education hub</span>'
-        '<span>RU / KZ</span><span>2026</span></div>'
+        '<section class="hero hero-plain">'
         f'<h1>{words("Учиться проще, когда всё рядом")}<span class="dot">.</span></h1>'
         '<p class="hero-lead">Лекции, презентации и материалы в одном месте. Выбери язык обучения.'
         '<br><span>Дәрістер мен презентациялар бір жерде. Оқу тілін таңда.</span></p></section>',
@@ -1370,22 +1365,12 @@ def search_index(config: dict, materials: list[dict]) -> None:
 
 
 def footer() -> None:
-    lang = st.session_state.get('lang', '')
-    t = I18N.get(lang, I18N['ru'])
-    # target=_self: plain links reload the app in this tab instead of opening a new one.
-    links = ([(t['nav_home'], f'?lang={lang}'), (t['library'], f'?lang={lang}&view=library'), (t['about'], f'?lang={lang}&view=about')]
-             if lang in LANG_LABELS else [('Русский', '?lang=ru'), ('Қазақша', '?lang=kz')])
-    a = lambda label, href: f'<a href="{esc(href)}" target="_self">{esc(label)}</a>'  # noqa: E731
     st.markdown(
-        '<footer class="footer-big"><div class="fcols">'
-        f'<div><span>{esc(t["f_sections"])}</span>' + ''.join(a(l, h) for l, h in links) + '</div>'
-        f'<div><span>{esc(t["f_langs"])}</span>{a("Русский", "?lang=ru")}{a("Қазақша", "?lang=kz")}</div>'
-        f'<div><span>{esc(t["f_formats"])}</span><p>PDF · PPTX · DOCX<br>MD · TXT · HTML</p></div>'
-        f'<div><span>{esc(t["f_keys"])}</span><p>{esc(t["f_keys_hint"])}</p></div></div>'
+        '<footer class="footer-big">'
         '<div class="wordmark" aria-hidden="true">StudySpace<span>■</span></div>'
-        f'<div class="fbottom"><span>© 2026 StudySpace</span>'
+        '<div class="fbottom"><span>© 2026 StudySpace</span>'
         '<span class="credit">Created by <button class="credit-name" type="button" title="?">denver</button></span>'
-        f'<span>{esc(t["f_made"])}</span></div></footer>',
+        '</div></footer>',
         unsafe_allow_html=True,
     )
 

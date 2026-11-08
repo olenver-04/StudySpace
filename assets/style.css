@@ -707,3 +707,6 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 /* The switch itself turns half a circle, like the moon flipping. */
 .ss-theme span {transition: transform .7s cubic-bezier(.65,0,.35,1)}
 .ss-instant, .ss-instant * {transition: none !important}
+/* Welcome hero without the meta strip: the headline needs its own breathing room. */
+.hero-plain {padding-top: clamp(48px, 9vw, 120px)}
+.footer-big .wordmark {margin-top: 28px}
