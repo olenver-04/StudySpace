@@ -326,8 +326,13 @@ def material_meta(item: dict, lang: str) -> str:
 
 
 def words(text: str) -> str:
-    """Headline split into words that rise one after another (see .w in style.css)."""
-    return ' '.join(f'<span class="w" style="--i:{i}">{esc(w)}</span>' for i, w in enumerate(text.split()))
+    """Headline split into words that rise one after another (see .w in style.css).
+
+    The red dot lives inside the last word, so it can never wrap onto a line of its own.
+    """
+    parts = text.split()
+    return ' '.join(f'<span class="w" style="--i:{i}">{esc(w)}' + ('<span class="dot">.</span>' if i == len(parts) - 1 else '') + '</span>'
+                    for i, w in enumerate(parts))
 
 
 def header(title: str, subtitle: str = '', eyebrow: str = '') -> None:
@@ -527,7 +532,7 @@ def welcome(materials: list[dict] | None = None) -> None:
     # Main text in the interface language; the other language stays as a quiet second line.
     st.markdown(
         '<section class="hero hero-plain">'
-        f'<h1>{words(t["w_head"])}<span class="dot">.</span></h1>'
+        f'<h1>{words(t["w_head"])}</h1>'
         f'<p class="hero-lead">{esc(t["w_lead"])}<br><span>{esc(o["w_lead"])}</span></p></section>',
         unsafe_allow_html=True,
     )
@@ -607,9 +612,8 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
     lectures = sum(i['kind'] == 'lectures' for i in visible)
     headline = 'Знания ближе, чем кажется' if lang == 'ru' else 'Білімнің бәрі осында'
     st.markdown(
-        f'<section class="hero"><div class="hero-meta"><span>{esc(t["hero_tag"])}</span><span>{esc(LANG_LABELS[lang])}</span>'
-        f'<span>PDF · PPTX · DOCX</span><span>2026</span></div>'
-        f'<h1>{words(headline)}<span class="dot">.</span></h1><p class="hero-lead">{esc(t["hero_sub"])}</p></section>',
+        f'<section class="hero hero-plain">'
+        f'<h1>{words(headline)}</h1><p class="hero-lead">{esc(t["hero_sub"])}</p></section>',
         unsafe_allow_html=True,
     )
     if st.button(t['browse']+'  →', type='primary', key='hero_browse'):
@@ -681,10 +685,8 @@ def course_page(config: dict, materials: list[dict], lang: str) -> None:
     fan = (''.join(f'<img src="{esc(c)}" alt="" style="--n:{n}">' for n, c in enumerate(covers))
            if len(covers) >= 2 else '')
     st.markdown(
-        f'<section class="course-hero">' + (f'<div class="course-fan" aria-hidden="true">{fan}</div>' if fan else '')
-        + f'<div class="hero-meta"><span>{index+1:02d} / {len(courses):02d}</span>'
-        f'<span>{esc(LANG_LABELS[lang])}</span><span>{esc(course.get("icon", ""))}</span><span>{len(own)} {esc(t["materials"])}</span></div>'
-        f'<h1>{words(display_course(course, lang))}<span class="dot">.</span></h1><div class="stats">{facts}</div>'
+        f'<section class="course-hero hero-plain">' + (f'<div class="course-fan" aria-hidden="true">{fan}</div>' if fan else '')
+        + f'<h1>{words(display_course(course, lang))}</h1><div class="stats">{facts}</div>'
         f'{progress_bar(studied, len(own), t["studied"]) if own else ""}</section>',
         unsafe_allow_html=True,
     )

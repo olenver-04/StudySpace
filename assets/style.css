@@ -777,7 +777,7 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 @media (prefers-reduced-motion: reduce) {
   .card-cover, .strip-item, .deck-thumb, .row-thumb {animation: none}
 }
-.course-fan {top: 132px}
+.course-fan {top: clamp(48px, 9vw, 120px)}  /* level with the title (same as .hero-plain padding) */
 .course-hero:has(.course-fan) h1 {max-width: 62%}
 @media (max-width: 900px) {.course-hero:has(.course-fan) h1 {max-width: 16ch}}
 
@@ -789,3 +789,9 @@ input, textarea, select, [contenteditable="true"], .ss-pal-head input, .sharelin
 button, [role="tab"], .st-key-topnav, .hero h1, .course-hero h1, .heading-block h2, .stats, .wordmark,
 [class*="st-key-row_"], [class*="st-key-card_"], [class*="st-key-langpanel_"], .strip, .deck-stage, .deck-bar, .deck-strip,
 .course-fan, .fbottom, .crumb-current, .ss-search, .ss-theme {-webkit-user-select: none; user-select: none}
+/* Headline words never break inside (their box only grows: min-width lock in fx.js). */
+.hero h1 .w, .course-hero h1 .w {white-space: nowrap}
+/* Next to the fan the title has ~60% of the width: a slightly smaller size keeps long words on one line. */
+.course-hero:has(.course-fan) h1 {font-size: clamp(36px, 5.2vw, 80px)}
+.course-fan {width: min(30%, 380px)}
+.course-hero:has(.course-fan) .stats {margin-top: clamp(40px, 7vw, 104px)}

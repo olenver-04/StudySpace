@@ -592,7 +592,7 @@
     var liveHeadline = null;
     function freeHeadline() {
       if (!liveHeadline) return;
-      liveHeadline.querySelectorAll('.w').forEach(function (w) { w.style.fontVariationSettings = ''; w.style.width = ''; });
+      liveHeadline.querySelectorAll('.w').forEach(function (w) { w.style.fontVariationSettings = ''; w.style.minWidth = ''; });
       liveHeadline = null;
     }
     if (fine && !reduce) {
@@ -604,7 +604,7 @@
         var ws = h.querySelectorAll('.w');
         if (liveHeadline !== h) {
           freeHeadline();
-          ws.forEach(function (w) { w.style.width = w.getBoundingClientRect().width + 'px'; });
+          ws.forEach(function (w) { w.style.minWidth = w.getBoundingClientRect().width + 'px'; });
           liveHeadline = h;
         }
         ws.forEach(function (w) {
@@ -614,6 +614,8 @@
         });
       }, {passive: true});
       addEventListener('resize', freeHeadline);
+      // Widths measured with a fallback font would be wrong once the real font arrives.
+      if (document.fonts) { document.fonts.ready.then(freeHeadline); document.fonts.addEventListener('loadingdone', freeHeadline); }
     }
 
     // Cursor cover preview: hovering a row that has a cover shows it large next to the pointer.
