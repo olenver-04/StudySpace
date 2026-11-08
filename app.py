@@ -66,7 +66,8 @@ I18N = {
         'nav_home':'Главная', 'nav_admin':'Преподавателю',
         'studied':'изучено', 'studied_title':'Изучено', 'mark_done':'✓  Отметить как изученное',
         'unmark_done':'✓  Изучено · снять отметку', 'in_text':'В тексте',
-        'slides_loading':'Готовим слайды…', 'copy':'Копировать', 'copied':'Скопировано ✓', 'fullscreen':'На весь экран', 'slide_word':'слайд', 'deck_hint':'← → или свайп',
+        'slides_loading':'Готовим слайды…', 'save_slide':'Слайд', 'resume':'Продолжаем со слайда {n}', 'from_start':'С начала', 'slide_of':'слайд {i} из {n}',
+        'copy':'Копировать', 'copied':'Скопировано ✓', 'fullscreen':'На весь экран', 'slide_word':'слайд', 'deck_hint':'← → или свайп',
         'new_week':'новых за неделю', 'f_slides':'Слайдов', 'strip':'Лента слайдов',
         'theme':'Светлая / тёмная тема', 'menu':'Меню', 'to_top':'Наверх',
         'search_open':'Поиск', 'search_ph':'Найти предмет или материал…', 'search_empty':'Ничего не найдено',
@@ -105,7 +106,8 @@ I18N = {
         'nav_home':'Басты бет', 'nav_admin':'Оқытушыға',
         'studied':'оқылды', 'studied_title':'Оқылды', 'mark_done':'✓  Оқылды деп белгілеу',
         'unmark_done':'✓  Оқылды · белгіні алу', 'in_text':'Мәтінде',
-        'slides_loading':'Слайдтар дайындалуда…', 'copy':'Көшіру', 'copied':'Көшірілді ✓', 'fullscreen':'Толық экран', 'slide_word':'слайд', 'deck_hint':'← → немесе свайп',
+        'slides_loading':'Слайдтар дайындалуда…', 'save_slide':'Слайд', 'resume':'{n}-слайдтан жалғастырамыз', 'from_start':'Басынан', 'slide_of':'{i}/{n} слайд',
+        'copy':'Көшіру', 'copied':'Көшірілді ✓', 'fullscreen':'Толық экран', 'slide_word':'слайд', 'deck_hint':'← → немесе свайп',
         'new_week':'аптадағы жаңа', 'f_slides':'Слайд', 'strip':'Слайдтар таспасы',
         'theme':'Ашық / қараңғы режим', 'menu':'Мәзір', 'to_top':'Жоғары',
         'search_open':'Іздеу', 'search_ph':'Пән немесе материал іздеу…', 'search_empty':'Ештеңе табылмады',
@@ -454,6 +456,8 @@ def material_row(item: dict, lang: str, prefix: str, number: int) -> None:
 def material_card(item: dict, lang: str, prefix: str, number: int) -> None:
     t = I18N[lang]
     cover, done = cover_url(item), is_done(item)
+    total, at = slides(item), positions().get(key_of(item['id']), 0)
+    resume = 1 < at <= total and not done
     badges = (f'<span class="card-badge done">✓ {esc(t["studied_title"])}</span>' if done else '') + \
              (f'<span class="card-badge new">{esc(t["new"])}</span>' if item.get('new') else '')
     with st.container(key=f'card_{prefix}_{key_of(item["id"])}'):
@@ -461,9 +465,14 @@ def material_card(item: dict, lang: str, prefix: str, number: int) -> None:
             '<div class="card"><div class="card-cover">'
             + (f'<img src="{esc(cover)}" alt="" loading="lazy">' if cover
                else f'<div class="card-ph"><b>{number:02d}</b><span>{esc(item["title"])}</span></div>')
-            + f'<div class="card-badges">{badges}</div></div>'
+            + f'<div class="card-badges">{badges}</div>'
+            + (f'<div class="card-pos"><i style="width:{100 * at / total:.1f}%"></i></div>' if resume else '') + '</div>'
             f'<div class="card-body"><span class="card-n">{"✓" if done else f"{number:02d}"}</span>'
-            f'<b class="card-title">{esc(item["title"])}</b><span class="card-meta">{esc(material_meta(item, lang))}</span></div></div>',
+            f'<b class="card-title">{esc(item["title"])}</b><span class="card-meta">'
+            + (f'<em>{esc(t["slide_of"].format(i=at, n=total))}</em> · ' if resume else '')
+            # "slide 5 of 10" already says how long it is, so the slide total is dropped next to it.
+            + (esc(item['extension'].lstrip('.').upper() + ' · ' + human_size(item['size'])) if resume else esc(material_meta(item, lang)))
+            + '</span></div></div>',
             unsafe_allow_html=True,
         )
         if st.button(t['open_item']+' →', key=f'item_{prefix}_{item["id"]}', type='tertiary', use_container_width=True):
@@ -517,6 +526,22 @@ def welcome(materials: list[dict] | None = None) -> None:
                         f'<b>{esc(title)}<span class="dot">.</span></b><p>{esc(sub)}</p></div>', unsafe_allow_html=True)
             if st.button(label+'  →', key='choose_'+code, type='primary', use_container_width=True):
                 route('home', lang=code)
+
+
+def positions() -> dict[str, int]:
+    """Last viewed slide per material (hashed id), from the ss_pos cookie that the viewer keeps up to date."""
+    if 'positions' not in st.session_state:
+        try:
+            raw = st.context.cookies.get('ss_pos')
+        except Exception:
+            raw = None
+        found = {}
+        for pair in (unquote(raw).split('|') if isinstance(raw, str) else []):
+            key, _, slide = pair.partition(':')
+            if re.fullmatch(r'[0-9a-f]{12}', key) and slide.isdecimal():
+                found[key] = int(slide)
+        st.session_state['positions'] = found
+    return st.session_state['positions']
 
 
 def done_ids() -> list[str]:
@@ -805,13 +830,16 @@ def deck(item: dict, count: int, t: dict) -> None:
         f'<button class="deck-thumb{" on" if n == start else ""}" type="button" data-i="{n}" aria-label="{esc(t["slide_word"])} {n}">'
         f'<img src="{base}t{n}.webp" alt="" loading="lazy"><span>{n:02d}</span></button>' for n in range(1, count + 1))
     st.markdown(
-        f'<div class="deck" data-total="{count}" data-start="{start}" data-base="{base}">'
+        f'<div class="deck" data-total="{count}" data-start="{start}" data-base="{base}" data-key="{key_of(item["id"])}" '
+        f'data-title="{esc(item["title"])}" data-resume="{esc(t["resume"])}" data-restart="{esc(t["from_start"])}" '
+        f'data-explicit="{1 if "slide" in st.query_params else 0}">'
         f'<div class="deck-stage"><img class="deck-img" src="{base}{start}.webp" alt="{esc(item["title"])}">'
         f'<button class="deck-nav deck-prev" type="button" aria-label="{esc(t["prev"])}">←</button>'
         f'<button class="deck-nav deck-next" type="button" aria-label="{esc(t["next"])}">→</button></div>'
         f'<div class="deck-bar"><span class="deck-count"><b>{start:02d}</b> / {count:02d}</span>'
         f'<div class="deck-progress"><i style="width:{100 * start / count:.2f}%"></i></div>'
         f'<span class="deck-hint">{esc(t["deck_hint"])}</span>'
+        f'<button class="deck-save" type="button" title="PNG">↓ {esc(t["save_slide"])}</button>'
         f'<button class="deck-full" type="button">⛶ {esc(t["fullscreen"])}</button></div>'
         f'<div class="deck-strip">{strip}</div></div>',
         unsafe_allow_html=True,

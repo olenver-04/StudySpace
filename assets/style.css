@@ -710,3 +710,20 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 /* Welcome hero without the meta strip: the headline needs its own breathing room. */
 .hero-plain {padding-top: clamp(48px, 9vw, 120px)}
 .footer-big .wordmark {margin-top: 28px}
+
+/* ---------- Resume position, save slide (5.6) ---------- */
+.deck-save {border: 1px solid var(--rule-soft); background: transparent; color: var(--ink); font: 600 12px var(--text); padding: 7px 12px; cursor: pointer; white-space: nowrap}
+.deck-save:hover {border-color: var(--ink)}
+.deck:fullscreen .deck-save, .deck.pseudo-full .deck-save {color: #F1EEE8; border-color: #34322F}
+.deck-bar {position: relative; flex-wrap: wrap}
+.deck-resume {position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 2; padding: 7px 12px; background: var(--ink); color: var(--paper);
+  font: 12px var(--text); white-space: nowrap; animation: rise .35s cubic-bezier(.2,.7,.2,1); transition: opacity .5s ease}
+.deck-resume.fade {opacity: 0}
+.deck-restart {background: none; border: 0; padding: 0; color: var(--accent, var(--red)); font: 600 12px var(--text); cursor: pointer; text-decoration: underline; text-underline-offset: 3px}
+.card-pos {position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,.35)}
+.card-pos i {position: absolute; inset: 0 auto 0 0; background: var(--accent, var(--red))}
+.card-meta em {font-style: normal; color: var(--accent, var(--red))}
+@media (max-width: 640px) {
+  .deck-save {padding: 7px 10px}
+  .deck-resume {white-space: normal; right: 0}
+}

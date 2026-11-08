@@ -13,6 +13,31 @@
   function main() {
     var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    // Home-screen app: manifest, icons and colours. On Streamlit Cloud the app runs in a same-origin
+    // iframe of the site's top page, and phones read the top page's <head>, so the tags go there too.
+    (function () {
+      var base = new URL('app/static/', document.baseURI).href;
+      var tags = [
+        ['link', {rel: 'manifest', href: base + 'manifest.json'}],
+        ['link', {rel: 'apple-touch-icon', href: base + 'icons/apple-touch-icon.png'}],
+        ['meta', {name: 'theme-color', content: '#111111'}],
+        ['meta', {name: 'apple-mobile-web-app-title', content: 'StudySpace'}],
+        ['meta', {name: 'apple-mobile-web-app-capable', content: 'yes'}],
+        ['meta', {name: 'mobile-web-app-capable', content: 'yes'}]
+      ];
+      var top = null;
+      try { top = window.top.document; } catch (e) { /* different origin: only this page gets the tags */ }
+      [document, top].forEach(function (doc) {
+        if (!doc || !doc.head || doc.getElementById('ss-app-tags')) return;
+        tags.forEach(function (tag, n) {
+          var el = doc.createElement(tag[0]);
+          Object.keys(tag[1]).forEach(function (k) { el.setAttribute(k, tag[1][k]); });
+          if (!n) el.id = 'ss-app-tags';
+          doc.head.appendChild(el);
+        });
+      });
+    })();
+
     // Reading progress bar and a back-to-top button for the main scroll area.
     var bar = document.createElement('div');
     bar.id = 'ss-progress';
@@ -181,6 +206,69 @@
         }
       });
       if (i < n) { var next = new Image(); next.src = base + (i + 1) + '.webp'; }  // preload
+      savePosition(deck.dataset.key, i);
+      var note = deck.querySelector('.deck-resume');
+      if (note && i !== +note.dataset.at) note.remove();
+    }
+
+    // "Continue where you left off": last slide per material in the ss_pos cookie (hash:slide|...),
+    // read by the server for the "slide 7 of 15" labels and here to reopen at that slide.
+    function readPositions() {
+      var match = document.cookie.match(/(?:^|; )ss_pos=([^;]*)/), out = {};
+      (match ? decodeURIComponent(match[1]).split('|') : []).forEach(function (pair) {
+        var bits = pair.split(':');
+        if (/^[0-9a-f]{12}$/.test(bits[0]) && +bits[1] > 0) out[bits[0]] = +bits[1];
+      });
+      return out;
+    }
+    function savePosition(key, i) {
+      if (!key) return;
+      var map = readPositions(), keys = [key].concat(Object.keys(map).filter(function (k) { return k !== key; })).slice(0, 120);
+      map[key] = i;
+      var value = keys.map(function (k) { return k + ':' + map[k]; }).join('|');
+      document.cookie = 'ss_pos=' + encodeURIComponent(value) + '; path=/; max-age=31536000; SameSite=Lax';
+    }
+    setInterval(function () {
+      document.querySelectorAll('.deck:not([data-ready])').forEach(function (deck) {
+        deck.setAttribute('data-ready', '1');
+        var at = readPositions()[deck.dataset.key] || 0, total = +deck.dataset.total;
+        // A link with &slide=N (search, shared link) wins over the remembered position.
+        if (deck.dataset.explicit === '1' || at <= 1 || at > total) return;
+        show(deck, at);
+        var note = document.createElement('span');
+        note.className = 'deck-resume';
+        note.dataset.at = at;
+        note.textContent = (deck.dataset.resume || '').replace('{n}', at) + ' · ';
+        var restart = document.createElement('button');
+        restart.type = 'button';
+        restart.className = 'deck-restart';
+        restart.textContent = deck.dataset.restart || '1';
+        note.appendChild(restart);
+        deck.querySelector('.deck-bar').appendChild(note);
+        setTimeout(function () { note.classList.add('fade'); }, 6000);
+        setTimeout(function () { note.remove(); }, 6600);
+      });
+    }, 300);
+
+    // Save the current slide as PNG (WebP is not accepted everywhere; PNG goes into any chat).
+    function saveSlide(deck) {
+      var i = current(deck), img = new Image();
+      img.onload = function () {
+        var canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        canvas.toBlob(function (blob) {
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = (deck.dataset.title || 'slide').replace(/[\\/:*?"<>|]+/g, ' ').trim() + ' — ' + i + '.png';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+        }, 'image/png');
+      };
+      img.src = deck.dataset.base + i + '.webp';
     }
     function fullscreen(deck) {
       if (document.fullscreenElement) { document.exitFullscreen(); return; }
@@ -195,6 +283,8 @@
       else if (e.target.closest('.deck-prev')) show(deck, current(deck) - 1);
       else if (e.target.closest('.deck-next')) show(deck, current(deck) + 1);
       else if (e.target.closest('.deck-full')) fullscreen(deck);
+      else if (e.target.closest('.deck-save')) saveSlide(deck);
+      else if (e.target.closest('.deck-restart')) show(deck, 1);
       else if (e.target.closest('.deck-img')) {  // click on the slide: left third back, rest forward
         var r = e.target.getBoundingClientRect();
         show(deck, current(deck) + (e.clientX - r.left < r.width / 3 ? -1 : 1));
