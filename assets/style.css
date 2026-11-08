@@ -61,7 +61,7 @@ button, input, select, textarea {font-family: inherit}
 .st-key-nav-brand button p::after {content: '■'; color: var(--red); font-size: .55em; margin-left: 3px; vertical-align: .55em}
 .st-key-nav-lang button[kind] {min-height: 32px !important; padding: 0 12px !important; border: 1px solid var(--ink) !important; background: transparent !important}
 .st-key-nav-lang button p {font-family: var(--mono) !important; font-size: 12px !important}
-.st-key-nav-lang button:hover {background: var(--ink) !important; color: var(--paper) !important}
+.st-key-nav-lang button[kind]:hover, .st-key-nav-lang button[kind]:focus-visible {background: transparent !important; border-color: var(--red) !important; color: var(--red) !important}
 
 /* ---------- Buttons ---------- */
 [data-testid="stButton"] button, .stDownloadButton button, [data-testid="stFormSubmitButton"] button {
@@ -727,3 +727,9 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
   .deck-save {padding: 7px 10px}
   .deck-resume {white-space: normal; right: 0}
 }
+
+/* ---------- Tooltips (Streamlit "help"): inverse colours, readable in both themes ---------- */
+[data-baseweb="tooltip"], [data-baseweb="tooltip"] > div, [data-testid="stTooltipContent"] {
+  background: var(--ink) !important; color: var(--paper) !important; border: 0 !important; box-shadow: none !important;
+}
+[data-testid="stTooltipContent"] *, [data-baseweb="tooltip"] p {color: var(--paper) !important; font: 500 12px var(--text) !important}
