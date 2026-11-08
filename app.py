@@ -66,7 +66,9 @@ I18N = {
         'nav_home':'Главная', 'nav_admin':'Преподавателю',
         'studied':'изучено', 'studied_title':'Изучено', 'mark_done':'✓  Отметить как изученное',
         'unmark_done':'✓  Изучено · снять отметку', 'in_text':'В тексте',
-        'slides_loading':'Готовим слайды…', 'save_slide':'Слайд', 'resume':'Продолжаем со слайда {n}', 'from_start':'С начала', 'slide_of':'слайд {i} из {n}',
+        'slides_loading':'Готовим слайды…', 'w_head':'Учиться проще, когда всё рядом', 'w_langs':'Язык обучения',
+        'w_lead':'Лекции, презентации и материалы в одном месте. Выбери язык обучения.',
+        'save_slide':'Слайд', 'resume':'Продолжаем со слайда {n}', 'from_start':'С начала', 'slide_of':'слайд {i} из {n}',
         'copy':'Копировать', 'copied':'Скопировано ✓', 'fullscreen':'На весь экран', 'slide_word':'слайд', 'deck_hint':'← → или свайп',
         'new_week':'новых за неделю', 'f_slides':'Слайдов', 'strip':'Лента слайдов',
         'theme':'Светлая / тёмная тема', 'menu':'Меню', 'to_top':'Наверх',
@@ -106,7 +108,9 @@ I18N = {
         'nav_home':'Басты бет', 'nav_admin':'Оқытушыға',
         'studied':'оқылды', 'studied_title':'Оқылды', 'mark_done':'✓  Оқылды деп белгілеу',
         'unmark_done':'✓  Оқылды · белгіні алу', 'in_text':'Мәтінде',
-        'slides_loading':'Слайдтар дайындалуда…', 'save_slide':'Слайд', 'resume':'{n}-слайдтан жалғастырамыз', 'from_start':'Басынан', 'slide_of':'{i}/{n} слайд',
+        'slides_loading':'Слайдтар дайындалуда…', 'w_head':'Бәрі қолыңда болса, оқу оңай', 'w_langs':'Оқу тілі',
+        'w_lead':'Дәрістер, презентациялар және материалдар бір жерде. Оқу тілін таңда.',
+        'save_slide':'Слайд', 'resume':'{n}-слайдтан жалғастырамыз', 'from_start':'Басынан', 'slide_of':'{i}/{n} слайд',
         'copy':'Көшіру', 'copied':'Көшірілді ✓', 'fullscreen':'Толық экран', 'slide_word':'слайд', 'deck_hint':'← → немесе свайп',
         'new_week':'аптадағы жаңа', 'f_slides':'Слайд', 'strip':'Слайдтар таспасы',
         'theme':'Ашық / қараңғы режим', 'menu':'Мәзір', 'to_top':'Жоғары',
@@ -213,6 +217,8 @@ def retrieve() -> tuple[dict, list[dict], str | None]:
 
 
 def route(page: str, *, lang: str | None = None, course: str = '', material: str = '') -> None:
+    if st.session_state.get('lang') in LANG_LABELS:
+        st.session_state['ui_lang'] = st.session_state['lang']
     if lang is not None:
         st.session_state['lang'] = lang
     st.session_state['page'] = page
@@ -361,6 +367,12 @@ def initial_route(materials: list[dict]) -> None:
         st.session_state.update(page='welcome', lang='', course='', material='')
 
 
+def ui_lang() -> str:
+    """Interface language: the chosen section, or on the welcome page the RU/KZ toggle (default RU)."""
+    lang = st.session_state.get('lang', '')
+    return lang if lang in LANG_LABELS else st.session_state.get('ui_lang', 'ru')
+
+
 def switch_language(config: dict, materials: list[dict], other: str) -> None:
     """Same page in the other language. route() reruns, so the first matching branch wins."""
     page = st.session_state.get('page', 'home')
@@ -386,12 +398,12 @@ def switch_language(config: dict, materials: list[dict], other: str) -> None:
 def topnav(config: dict, materials: list[dict]) -> None:
     """Top bar: brand, sections, teacher link, language switch. Replaces the old sidebar."""
     lang = st.session_state.get('lang', '')
-    t = I18N.get(lang, I18N['ru'])
+    t = I18N[ui_lang()]
     page = st.session_state.get('page', 'welcome')
     current = {'course': 'home', 'reader': 'library'}.get(page, page)
     links = [('home', t['nav_home']), ('library', t['library']), ('about', t['about'])] if lang in LANG_LABELS else []
     links.append(('admin', t['nav_admin']))
-    other = {'ru': 'kz', 'kz': 'ru'}.get(lang)
+    other = {'ru': 'kz', 'kz': 'ru'}[ui_lang()]
     with st.container(key='topnav'):
         # brand | search | links (desktop) | theme | language | menu (phones)
         cols = st.columns([3.2, 1.4] + [1] * len(links) + [0.35, 0.7, 0.7], vertical_alignment='center', gap='small')
@@ -407,11 +419,12 @@ def topnav(config: dict, materials: list[dict]) -> None:
                     route(target)
         cols[-3].markdown(f'<button class="ss-theme" type="button" aria-label="{esc(t["theme"])}" title="{esc(t["theme"])}">'
                           '<span aria-hidden="true">◐</span></button>', unsafe_allow_html=True)
-        if cols[-2].button(other.upper() if other else 'RU/KZ', key='nav-lang', help=t['change_lang']):
-            if other:
+        if cols[-2].button(other.upper(), key='nav-lang', help=t['change_lang']):
+            if lang in LANG_LABELS:
                 switch_language(config, materials, other)
-            else:
-                route('welcome', lang='')
+            else:  # welcome page / teacher page before a section is chosen: just the interface language
+                st.session_state['ui_lang'] = other
+                st.rerun()
         with cols[-1], st.container(key='nav-menu'), st.popover(t['menu'], use_container_width=True):
             for target, label in links:
                 if st.button(('● ' if current == target else '')+label, key='menu-'+target, type='tertiary', use_container_width=True):
@@ -509,15 +522,17 @@ def material_list(items: list[dict], lang: str, prefix: str) -> None:
 
 
 def welcome(materials: list[dict] | None = None) -> None:
+    ui = ui_lang()
+    t, o = I18N[ui], I18N['kz' if ui == 'ru' else 'ru']
+    # Main text in the interface language; the other language stays as a quiet second line.
     st.markdown(
         '<section class="hero hero-plain">'
-        f'<h1>{words("Учиться проще, когда всё рядом")}<span class="dot">.</span></h1>'
-        '<p class="hero-lead">Лекции, презентации и материалы в одном месте. Выбери язык обучения.'
-        '<br><span>Дәрістер мен презентациялар бір жерде. Оқу тілін таңда.</span></p></section>',
+        f'<h1>{words(t["w_head"])}<span class="dot">.</span></h1>'
+        f'<p class="hero-lead">{esc(t["w_lead"])}<br><span>{esc(o["w_lead"])}</span></p></section>',
         unsafe_allow_html=True,
     )
-    slide_strip(materials or [], 'Слайдтар / Слайды')
-    header('Язык обучения / Оқу тілі', '', '01')
+    slide_strip(materials or [], t['strip'])
+    header(f'{t["w_langs"]} / {o["w_langs"]}', '', '01')
     sections = [('ru', 'Русский', 'Лекции, презентации и материалы для самостоятельной работы на русском языке.', 'Открыть раздел'),
                 ('kz', 'Қазақша', 'Қазақ тіліндегі дәрістер, презентациялар және өзіндік жұмысқа арналған материалдар.', 'Бөлімді ашу')]
     for col, (code, title, sub, label) in zip(st.columns(2, gap='small'), sections):
@@ -1374,7 +1389,7 @@ def start_index(config: dict, materials: list[dict]) -> None:
 def search_index(config: dict, materials: list[dict]) -> None:
     """Hidden JSON for the client-side search palette in fx.js: only what students can already open."""
     lang = st.session_state.get('lang', '')
-    t = I18N.get(lang, I18N['ru'])
+    t = I18N[ui_lang()]
     entries = []
     for code in LANG_LABELS:
         tl = I18N[code]
