@@ -535,5 +535,112 @@
       else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === '/' || e.code === 'Slash')) { e.preventDefault(); open(); }
       else if (e.key === 'Escape') close();
     });
+
+    // =========================================================================
+    // 5.7 motion: page enter, cover flight, live headline, cursor cover preview
+    // =========================================================================
+    var fine = matchMedia('(pointer: fine)').matches;
+
+    // Page enter: after each navigation the new page rises in once Streamlit has finished drawing it.
+    var enterFrom = location.search, entering = false;
+    setInterval(function () {
+      if (location.search !== enterFrom) { enterFrom = location.search; entering = true; }
+      if (!entering || document.querySelector('[data-stale="true"]') || reduce) return;
+      entering = false;
+      var main = document.querySelector('[data-testid="stMainBlockContainer"]');
+      if (main) main.animate([{opacity: 0, transform: 'translateY(14px)'}, {opacity: 1, transform: 'none'}],
+                             {duration: 420, easing: 'cubic-bezier(.2,.7,.2,1)'});
+    }, 60);
+
+    // Cover flight: the clicked card's cover flies into the slide viewer when it opens.
+    var flight = null;
+    document.addEventListener('click', function (e) {
+      var card = e.target.closest && e.target.closest('[class*="st-key-card_"]');
+      var img = card && card.querySelector('.card-cover img');
+      if (img) flight = {rect: img.getBoundingClientRect(), src: img.currentSrc || img.src, at: Date.now()};
+    }, true);  // capture: runs before the click turns into a Streamlit rerun
+    setInterval(function () {
+      var deck = document.querySelector('.deck:not([data-flown])');
+      if (!deck) return;
+      deck.setAttribute('data-flown', '1');
+      var trip = flight;
+      flight = null;
+      if (!trip || reduce || Date.now() - trip.at > 10000) return;
+      var stage = deck.querySelector('.deck-stage'), slide = deck.querySelector('.deck-img');
+      setTimeout(function () {  // after the scroll-to-top that follows navigation
+        var to = stage.getBoundingClientRect();
+        if (!to.width) return;
+        var ghost = document.createElement('img');
+        ghost.src = trip.src;
+        ghost.className = 'ss-flight';
+        document.body.appendChild(ghost);
+        slide.style.opacity = '0';
+        // Safety net: if the animation never finishes (tab hidden), the slide and page still recover.
+        setTimeout(function () { slide.style.opacity = ''; if (ghost.isConnected) ghost.remove(); }, 1500);
+        ghost.animate([
+          {left: trip.rect.left + 'px', top: trip.rect.top + 'px', width: trip.rect.width + 'px', height: trip.rect.height + 'px'},
+          {left: to.left + 'px', top: to.top + 'px', width: to.width + 'px', height: to.height + 'px'}
+        ], {duration: 560, easing: 'cubic-bezier(.65,0,.35,1)', fill: 'forwards'}).onfinish = function () {
+          slide.style.opacity = '';
+          ghost.animate([{opacity: 1}, {opacity: 0}], {duration: 180}).onfinish = function () { ghost.remove(); };
+        };
+      }, 700);
+    }, 120);
+
+    // Live headline: words near the cursor get thinner (variable Inter Tight). Each word's box keeps
+    // its width while active, so the lines never reflow.
+    var liveHeadline = null;
+    function freeHeadline() {
+      if (!liveHeadline) return;
+      liveHeadline.querySelectorAll('.w').forEach(function (w) { w.style.fontVariationSettings = ''; w.style.width = ''; });
+      liveHeadline = null;
+    }
+    if (fine && !reduce) {
+      document.addEventListener('pointermove', function (e) {
+        var h = document.querySelector('.hero h1, .course-hero h1');
+        if (!h) { freeHeadline(); return; }
+        var r = h.getBoundingClientRect();
+        if (e.clientY < r.top - 160 || e.clientY > r.bottom + 160) { freeHeadline(); return; }
+        var ws = h.querySelectorAll('.w');
+        if (liveHeadline !== h) {
+          freeHeadline();
+          ws.forEach(function (w) { w.style.width = w.getBoundingClientRect().width + 'px'; });
+          liveHeadline = h;
+        }
+        ws.forEach(function (w) {
+          var b = w.getBoundingClientRect();
+          var k = Math.max(0, 1 - Math.hypot(e.clientX - (b.left + b.width / 2), e.clientY - (b.top + b.height / 2)) / 440);
+          w.style.fontVariationSettings = "'wght' " + Math.round(700 - 380 * k * k);
+        });
+      }, {passive: true});
+      addEventListener('resize', freeHeadline);
+    }
+
+    // Cursor cover preview: hovering a row that has a cover shows it large next to the pointer.
+    if (fine && !reduce) {
+      var peek = document.createElement('img');
+      peek.id = 'ss-peek';
+      peek.alt = '';
+      document.body.appendChild(peek);
+      var px = -999, py = -999, tx = -999, ty = -999, showing = false;
+      document.addEventListener('pointermove', function (e) {
+        var row = e.target.closest && e.target.closest('[class*="st-key-row_"]');
+        var thumb = row && row.querySelector('.row-thumb');
+        showing = !!thumb;
+        if (!thumb) return;
+        if (peek.getAttribute('src') !== thumb.getAttribute('src')) peek.src = thumb.src;
+        var w = 320, flip = e.clientX + 28 + w > innerWidth;
+        tx = flip ? e.clientX - w - 28 : e.clientX + 28;
+        ty = Math.min(innerHeight - w * 9 / 16 - 12, Math.max(12, e.clientY - w * 9 / 32));
+        if (px < -900) { px = tx; py = ty; }
+      }, {passive: true});
+      (function follow() {
+        px += (tx - px) * 0.2;
+        py += (ty - py) * 0.2;
+        peek.style.transform = 'translate(' + px + 'px,' + py + 'px) rotate(' + Math.max(-6, Math.min(6, (tx - px) * 0.05)) + 'deg)';
+        peek.classList.toggle('show', showing);
+        requestAnimationFrame(follow);
+      })();
+    }
   }
 })();

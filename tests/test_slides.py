@@ -50,3 +50,16 @@ def test_presentation_only_site_hides_the_split(gh, monkeypatch):
 def test_mixed_site_keeps_the_split(gh):
     library = ok(app('library', 'ru'))
     assert any(s.key == 'kind_selector_ru' for s in library.selectbox)
+
+
+def test_course_hero_shows_a_fan_of_covers(gh, tmp_path):
+    thumbs = tmp_path / 'static' / 'thumbs'  # the same folder the gh fixture points STUDYSPACE_STATIC to
+    thumbs.mkdir(parents=True)
+    for sha in ('sha0', 'sha1'):  # the two RU lectures of "algo"
+        (thumbs / f'{sha}.webp').write_bytes(b'RIFF')
+    page = html_of(ok(app('course', 'ru', course='algo')))
+    assert 'class="course-fan"' in page and page.count('app/static/thumbs/sha') >= 2
+
+
+def test_no_fan_without_covers(gh):
+    assert 'class="course-fan"' not in html_of(ok(app('course', 'ru', course='algo')))

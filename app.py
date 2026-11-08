@@ -676,8 +676,13 @@ def course_page(config: dict, materials: list[dict], lang: str) -> None:
     studied = sum(is_done(m) for m in own)
     facts += f'<div><b>{studied:02d}<small>/{len(own):02d}</small></b><span>{esc(t["studied_title"])}</span></div>'
     use_accent(accent(own))
+    # A fanned stack of the course's first covers next to the title (hidden on phones).
+    covers = [c for c in (cover_url(m) for m in own) if c][:3]
+    fan = (''.join(f'<img src="{esc(c)}" alt="" style="--n:{n}">' for n, c in enumerate(covers))
+           if len(covers) >= 2 else '')
     st.markdown(
-        f'<section class="course-hero"><div class="hero-meta"><span>{index+1:02d} / {len(courses):02d}</span>'
+        f'<section class="course-hero">' + (f'<div class="course-fan" aria-hidden="true">{fan}</div>' if fan else '')
+        + f'<div class="hero-meta"><span>{index+1:02d} / {len(courses):02d}</span>'
         f'<span>{esc(LANG_LABELS[lang])}</span><span>{esc(course.get("icon", ""))}</span><span>{len(own)} {esc(t["materials"])}</span></div>'
         f'<h1>{words(display_course(course, lang))}<span class="dot">.</span></h1><div class="stats">{facts}</div>'
         f'{progress_bar(studied, len(own), t["studied"]) if own else ""}</section>',

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /*
  StudySpace 5.0 — Swiss / International Typographic Style.
@@ -733,3 +733,50 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
   background: var(--ink) !important; color: var(--paper) !important; border: 0 !important; box-shadow: none !important;
 }
 [data-testid="stTooltipContent"] *, [data-baseweb="tooltip"] p {color: var(--paper) !important; font: 500 12px var(--text) !important}
+
+/* =====================================================================
+   5.7: fan of covers, cover flight, live headline, cursor preview, skeletons
+   ===================================================================== */
+/* Live headline: weight changes smoothly; a word keeps its box, so it is centred inside it. */
+.hero h1 .w, .course-hero h1 .w {transition: font-variation-settings .35s cubic-bezier(.2,.7,.2,1); text-align: center}
+
+/* Fan of the course's covers next to the title */
+.course-hero {position: relative}
+.course-fan {position: absolute; right: 0; top: 96px; width: min(34%, 420px); aspect-ratio: 16 / 10; pointer-events: auto}
+.course-fan img {position: absolute; inset: 0 0 auto auto; width: 82%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--rule);
+  box-shadow: 0 24px 50px -24px rgba(0,0,0,.55); transform-origin: 80% 100%;
+  transform: translate(calc(var(--n) * -9%), calc(var(--n) * 12%)) rotate(calc(6deg - var(--n) * 6deg));
+  transition: transform .5s cubic-bezier(.2,.7,.2,1); animation: fanin .8s cubic-bezier(.2,.7,.2,1) backwards; animation-delay: calc(var(--n) * 90ms + 200ms)}
+.course-fan img:nth-child(1) {z-index: 3}
+.course-fan img:nth-child(2) {z-index: 2}
+.course-fan img:nth-child(3) {z-index: 1}
+.course-fan:hover img {transform: translate(calc(var(--n) * -30%), calc(var(--n) * 6%)) rotate(calc(4deg - var(--n) * 7deg))}
+@keyframes fanin {from {opacity: 0; transform: translate(10%, 20%) rotate(14deg)}}
+.course-hero h1 {position: relative; z-index: 4}
+
+/* The cover that flies into the viewer */
+.ss-flight {position: fixed; z-index: 1000004; object-fit: cover; pointer-events: none; border: 1px solid var(--rule); box-shadow: 0 30px 70px -30px rgba(0,0,0,.6)}
+
+/* Cover that follows the cursor over index rows */
+#ss-peek {position: fixed; left: 0; top: 0; z-index: 1000003; width: 320px; aspect-ratio: 16 / 9; object-fit: cover; pointer-events: none;
+  border: 1px solid var(--rule); background: var(--paper-2); box-shadow: 0 30px 60px -28px rgba(0,0,0,.55);
+  opacity: 0; scale: .92; transition: opacity .2s ease, scale .25s cubic-bezier(.2,.7,.2,1)}
+#ss-peek.show {opacity: 1; scale: 1}
+
+/* Skeletons: a soft sweep behind every image until it has loaded and covers it */
+.card-cover, .strip-item, .deck-thumb, .row-thumb, .course-fan img {
+  background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--rule-soft) 55%, transparent) 50%, transparent 70%) var(--paper-2);
+  background-size: 220% 100%; animation-name: shimmer; animation-duration: 1.4s; animation-timing-function: linear; animation-iteration-count: infinite;
+}
+.course-fan img {animation: fanin .8s cubic-bezier(.2,.7,.2,1) backwards, shimmer 1.4s linear infinite; animation-delay: calc(var(--n) * 90ms + 200ms), 0s}
+@keyframes shimmer {from {background-position: 120% 0} to {background-position: -120% 0}}
+
+@media (max-width: 900px) {
+  .course-fan {display: none}
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-cover, .strip-item, .deck-thumb, .row-thumb {animation: none}
+}
+.course-fan {top: 132px}
+.course-hero:has(.course-fan) h1 {max-width: 62%}
+@media (max-width: 900px) {.course-hero:has(.course-fan) h1 {max-width: 16ch}}
