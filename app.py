@@ -70,7 +70,7 @@ I18N = {
         'w_lead':'Лекции, презентации и материалы в одном месте. Выбери язык обучения.',
         'save_slide':'Слайд', 'resume':'Продолжаем со слайда {n}', 'from_start':'С начала', 'slide_of':'слайд {i} из {n}',
         'copy':'Копировать', 'copied':'Скопировано ✓', 'fullscreen':'На весь экран', 'slide_word':'слайд', 'deck_hint':'← → или свайп',
-        'new_week':'новых за неделю', 'f_slides':'Слайдов', 'strip':'Лента слайдов',
+        'new_week':'новых за неделю', 'f_slides':'Слайдов',
         'theme':'Светлая / тёмная тема', 'menu':'Меню', 'to_top':'Наверх',
         'search_open':'Поиск', 'search_ph':'Найти предмет или материал…', 'search_empty':'Ничего не найдено',
         'course_word':'Предмет', 'prev':'Предыдущий', 'next':'Следующий',
@@ -112,7 +112,7 @@ I18N = {
         'w_lead':'Дәрістер, презентациялар және материалдар бір жерде. Оқу тілін таңда.',
         'save_slide':'Слайд', 'resume':'{n}-слайдтан жалғастырамыз', 'from_start':'Басынан', 'slide_of':'{i}/{n} слайд',
         'copy':'Көшіру', 'copied':'Көшірілді ✓', 'fullscreen':'Толық экран', 'slide_word':'слайд', 'deck_hint':'← → немесе свайп',
-        'new_week':'аптадағы жаңа', 'f_slides':'Слайд', 'strip':'Слайдтар таспасы',
+        'new_week':'аптадағы жаңа', 'f_slides':'Слайд',
         'theme':'Ашық / қараңғы режим', 'menu':'Мәзір', 'to_top':'Жоғары',
         'search_open':'Іздеу', 'search_ph':'Пән немесе материал іздеу…', 'search_empty':'Ештеңе табылмады',
         'course_word':'Пән', 'prev':'Алдыңғы', 'next':'Келесі',
@@ -506,27 +506,13 @@ def material_grid(items: list[dict], lang: str, prefix: str, per_row: int = 3) -
                 material_card(item, lang, prefix, start + offset + 1)
 
 
-def slide_strip(items: list[dict], label: str) -> None:
-    """Slowly moving ribbon of slide covers; plain links (a click opens the material)."""
-    covers = [(m, cover_url(m)) for m in items]
-    covers = [(m, c) for m, c in covers if c][:16]
-    if len(covers) < 4:
-        return
-    cells = ''.join(
-        f'<a class="strip-item" href="?{esc(urlencode({"lang": m["lang"], "material": m["id"]}))}" target="_self">'
-        f'<img src="{esc(c)}" alt="{esc(m["title"])}" loading="lazy"><span>{esc(m["title"])}</span></a>' for m, c in covers)
-    st.markdown(f'<div class="strip" role="region" aria-label="{esc(label)}" style="--n:{len(covers)}">'
-                f'<div class="strip-track">{cells}<div class="strip-copy" aria-hidden="true">{cells}</div></div></div>',
-                unsafe_allow_html=True)
-
-
 def material_list(items: list[dict], lang: str, prefix: str) -> None:
     for n, item in enumerate(items, 1):
         material_row(item, lang, prefix, n)
     end_list()
 
 
-def welcome(materials: list[dict] | None = None) -> None:
+def welcome() -> None:
     ui = ui_lang()
     t, o = I18N[ui], I18N['kz' if ui == 'ru' else 'ru']
     # Main text in the interface language; the other language stays as a quiet second line.
@@ -536,7 +522,6 @@ def welcome(materials: list[dict] | None = None) -> None:
         f'<p class="hero-lead">{esc(t["w_lead"])}<br><span>{esc(o["w_lead"])}</span></p></section>',
         unsafe_allow_html=True,
     )
-    slide_strip(materials or [], t['strip'])
     header(f'{t["w_langs"]} / {o["w_langs"]}', '', '01')
     sections = [('ru', 'Русский', 'Лекции, презентации и материалы для самостоятельной работы на русском языке.', 'Открыть раздел'),
                 ('kz', 'Қазақша', 'Қазақ тіліндегі дәрістер, презентациялар және өзіндік жұмысқа арналған материалдар.', 'Бөлімді ашу')]
@@ -627,7 +612,6 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
     stats += [(fresh_count, t['new_week'])]
     st.markdown('<div class="stats stats-auto">' + ''.join(f'<div><b data-count="{v}">{v:02d}</b><span>{esc(label)}</span></div>'
                                                 for v, label in stats) + '</div>', unsafe_allow_html=True)
-    slide_strip(sorted(visible, key=lambda m: m.get('new') or '', reverse=True), t['strip'])
     by_id = {m['id']: m for m in visible}
     recent = [by_id[i] for i in recent_ids() if i in by_id][:4]
     if recent:
@@ -1440,7 +1424,7 @@ def main() -> None:
     if page == 'admin':
         admin(config, materials)
     elif page == 'welcome' or lang not in LANG_LABELS:
-        welcome(materials)
+        welcome()
     elif page == 'home':
         home(config, materials, lang)
     elif page == 'library':
@@ -1452,7 +1436,7 @@ def main() -> None:
     elif page == 'about':
         about(lang)
     else:
-        welcome(materials)
+        welcome()
     footer()
     search_index(config, materials)
     # fx.js copies this into the ss_done cookie, so marks survive the next visit.

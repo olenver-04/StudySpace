@@ -569,21 +569,6 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 .row-thumb {width: 112px; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--rule-soft); display: block; transition: border-color .2s ease}
 [class*="st-key-row_"]:hover .row-thumb {border-color: var(--red)}
 
-/* ---------- Slide strip (marquee) ---------- */
-.strip {margin: 34px calc(50% - 50vw) 0; overflow: hidden; border-block: 1px solid var(--rule); padding: 14px 0;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)}
-.strip-track {display: flex; gap: 14px; width: max-content; animation: strip calc(var(--n, 8) * 5s) linear infinite}
-.strip-copy {display: contents}
-.strip:hover .strip-track {animation-play-state: paused}
-.strip-item {position: relative; flex: none; width: 260px; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--rule-soft); display: block; text-decoration: none !important}
-.strip-item img {width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s cubic-bezier(.2,.7,.2,1)}
-.strip-item span {position: absolute; inset: auto 0 0 0; padding: 22px 10px 8px; font: 600 12px/1.25 var(--display); color: #fff;
-  background: linear-gradient(transparent, rgba(0,0,0,.72)); opacity: 0; transform: translateY(6px); transition: opacity .25s ease, transform .25s ease}
-.strip-item:hover {border-color: var(--red)}
-.strip-item:hover img {transform: scale(1.06)}
-.strip-item:hover span {opacity: 1; transform: none}
-@keyframes strip {to {transform: translateX(calc(-50% - 7px))}}
-
 /* ---------- Scroll-driven reveals (progressive: browsers without support just show everything) ---------- */
 @supports (animation-timeline: view()) {
   .heading-block, [class*="st-key-card_"], .apanel, .stats {
@@ -595,13 +580,7 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 @media (max-width: 640px) {
   .row.has-thumb {grid-template-columns: var(--gutter) minmax(0, 1fr)}
   .row.has-thumb .row-thumb {display: none}
-  .strip-item {width: 200px}
   .card-ph b {font-size: 36px}
-}
-@media (prefers-reduced-motion: reduce) {
-  .strip-track {animation: none}
-  .strip {overflow-x: auto}
-  .strip-copy {display: none}
 }
 /* Streamlit pulls markdown blocks up by 1rem; without this the card button overlaps the meta line. */
 .card {padding-bottom: 28px}
@@ -764,7 +743,7 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
 #ss-peek.show {opacity: 1; scale: 1}
 
 /* Skeletons: a soft sweep behind every image until it has loaded and covers it */
-.card-cover, .strip-item, .deck-thumb, .row-thumb, .course-fan img {
+.card-cover, .deck-thumb, .row-thumb, .course-fan img {
   background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--rule-soft) 55%, transparent) 50%, transparent 70%) var(--paper-2);
   background-size: 220% 100%; animation-name: shimmer; animation-duration: 1.4s; animation-timing-function: linear; animation-iteration-count: infinite;
 }
@@ -775,7 +754,7 @@ button [data-testid="stMarkdownContainer"], button [data-testid="stMarkdownConta
   .course-fan {display: none}
 }
 @media (prefers-reduced-motion: reduce) {
-  .card-cover, .strip-item, .deck-thumb, .row-thumb {animation: none}
+  .card-cover, .deck-thumb, .row-thumb {animation: none}
 }
 .course-fan {top: clamp(48px, 9vw, 120px)}  /* level with the title (same as .hero-plain padding) */
 .course-hero:has(.course-fan) h1 {max-width: 62%}
@@ -787,7 +766,7 @@ html, body, .stApp, .stApp * {caret-color: transparent}
 input, textarea, select, [contenteditable="true"], .ss-pal-head input, .sharelink input {caret-color: auto !important}
 /* Clickable things should not get highlighted text on click or double-click. Reading text stays selectable. */
 button, [role="tab"], .st-key-topnav, .hero h1, .course-hero h1, .heading-block h2, .stats, .wordmark,
-[class*="st-key-row_"], [class*="st-key-card_"], [class*="st-key-langpanel_"], .strip, .deck-stage, .deck-bar, .deck-strip,
+[class*="st-key-row_"], [class*="st-key-card_"], [class*="st-key-langpanel_"], .deck-stage, .deck-bar, .deck-strip,
 .course-fan, .fbottom, .crumb-current, .ss-search, .ss-theme {-webkit-user-select: none; user-select: none}
 /* Headline words never break inside (their box only grows: min-width lock in fx.js). */
 .hero h1 .w, .course-hero h1 .w {white-space: nowrap}
