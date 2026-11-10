@@ -70,7 +70,7 @@ I18N = {
         'w_lead':'Лекции, презентации и материалы в одном месте. Выбери язык обучения.',
         'save_slide':'Слайд', 'resume':'Продолжаем со слайда {n}', 'from_start':'С начала', 'slide_of':'слайд {i} из {n}',
         'copy':'Копировать', 'copied':'Скопировано ✓', 'fullscreen':'На весь экран', 'slide_word':'слайд', 'deck_hint':'← → или свайп',
-        'new_week':'новых за неделю', 'f_slides':'Слайдов',
+        'f_slides':'Слайдов',
         'theme':'Светлая / тёмная тема', 'menu':'Меню', 'to_top':'Наверх',
         'search_open':'Поиск', 'search_ph':'Найти предмет или материал…', 'search_empty':'Ничего не найдено',
         'course_word':'Предмет', 'prev':'Предыдущий', 'next':'Следующий',
@@ -112,7 +112,7 @@ I18N = {
         'w_lead':'Дәрістер, презентациялар және материалдар бір жерде. Оқу тілін таңда.',
         'save_slide':'Слайд', 'resume':'{n}-слайдтан жалғастырамыз', 'from_start':'Басынан', 'slide_of':'{i}/{n} слайд',
         'copy':'Көшіру', 'copied':'Көшірілді ✓', 'fullscreen':'Толық экран', 'slide_word':'слайд', 'deck_hint':'← → немесе свайп',
-        'new_week':'аптадағы жаңа', 'f_slides':'Слайд',
+        'f_slides':'Слайд',
         'theme':'Ашық / қараңғы режим', 'menu':'Мәзір', 'to_top':'Жоғары',
         'search_open':'Іздеу', 'search_ph':'Пән немесе материал іздеу…', 'search_empty':'Ештеңе табылмады',
         'course_word':'Пән', 'prev':'Алдыңғы', 'next':'Келесі',
@@ -594,7 +594,6 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
     visible_courses = [c for c in config['courses'] if lang in course_languages(c)]
     visible_ids = {c['id'] for c in visible_courses}
     visible = [m for m in materials if m['lang'] == lang and m['course_id'] in visible_ids]
-    lectures = sum(i['kind'] == 'lectures' for i in visible)
     headline = 'Знания ближе, чем кажется' if lang == 'ru' else 'Білімнің бәрі осында'
     st.markdown(
         f'<section class="hero hero-plain">'
@@ -603,15 +602,6 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
     )
     if st.button(t['browse']+'  →', type='primary', key='hero_browse'):
         route('library')
-    total_slides = sum(slides(m) for m in visible)
-    fresh_count = sum(bool(m.get('new')) for m in visible)
-    stats = [(len(visible_courses), plural(len(visible_courses), lang, 'courses')),
-             (len(visible), plural(len(visible), lang, 'materials'))]
-    stats += [(lectures, t['lectures']), (len(visible) - lectures, t['presentations'])] if mixed() else []
-    stats += [(total_slides, plural(total_slides, lang, 'slides'))] if total_slides else []
-    stats += [(fresh_count, t['new_week'])]
-    st.markdown('<div class="stats stats-auto">' + ''.join(f'<div><b data-count="{v}">{v:02d}</b><span>{esc(label)}</span></div>'
-                                                for v, label in stats) + '</div>', unsafe_allow_html=True)
     by_id = {m['id']: m for m in visible}
     recent = [by_id[i] for i in recent_ids() if i in by_id][:4]
     if recent:
@@ -651,14 +641,7 @@ def course_page(config: dict, materials: list[dict], lang: str) -> None:
     own = [m for m in materials if m['lang'] == lang and m['course_id'] == course['id']]
     groups = [(t['lectures_title'], [m for m in own if m['kind'] == 'lectures']),
               (t['presentations_title'], [m for m in own if m['kind'] == 'presentations'])]
-    fresh = sum(bool(m.get('new')) for m in own)
-    n_slides = sum(slides(m) for m in own)
-    facts = (''.join(f'<div><b>{len(items):02d}</b><span>{esc(title)}</span></div>' for title, items in groups) if mixed()
-             else f'<div><b>{len(own):02d}</b><span>{esc(plural(len(own), lang, "pres"))}</span></div>')
-    facts += f'<div><b>{n_slides}</b><span>{esc(plural(n_slides, lang, "slides"))}</span></div>' if n_slides else ''
-    facts += f'<div class="fact-new"><b>{fresh:02d}</b><span>{esc(t["new"])}</span></div>' if fresh else ''
     studied = sum(is_done(m) for m in own)
-    facts += f'<div><b>{studied:02d}<small>/{len(own):02d}</small></b><span>{esc(t["studied_title"])}</span></div>'
     use_accent(accent(own))
     # A fanned stack of the course's first covers next to the title (hidden on phones).
     covers = [c for c in (cover_url(m) for m in own) if c][:3]
@@ -666,7 +649,7 @@ def course_page(config: dict, materials: list[dict], lang: str) -> None:
            if len(covers) >= 2 else '')
     st.markdown(
         f'<section class="course-hero hero-plain">' + (f'<div class="course-fan" aria-hidden="true">{fan}</div>' if fan else '')
-        + f'<h1>{words(display_course(course, lang))}</h1><div class="stats">{facts}</div>'
+        + f'<h1>{words(display_course(course, lang))}</h1>'
         f'{progress_bar(studied, len(own), t["studied"]) if own else ""}</section>',
         unsafe_allow_html=True,
     )

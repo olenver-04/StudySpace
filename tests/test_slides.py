@@ -40,7 +40,7 @@ def test_presentation_only_site_hides_the_split(gh, monkeypatch):
     presentations_only(monkeypatch)
     home = ok(app('home', 'ru'))
     page = html_of(home)
-    assert 'лекций' not in page.lower() and 'новых за неделю' in page
+    assert 'лекций' not in page.lower() and 'class="stats' not in page  # no numbers row on the home page
     library = ok(app('library', 'ru'))
     assert not any(s.key == 'kind_selector_ru' for s in library.selectbox)
     course = html_of(ok(app('course', 'ru', course='algo')))
