@@ -855,6 +855,8 @@ def deck(item: dict, count: int, t: dict) -> None:
         f'<div class="deck" data-total="{count}" data-start="{start}" data-base="{base}" data-key="{key_of(item["id"])}" '
         f'data-title="{esc(item["title"])}" data-resume="{esc(t["resume"])}" data-restart="{esc(t["from_start"])}" '
         f'data-explicit="{1 if "slide" in st.query_params else 0}">'
+        # The glow is the slide's own small preview, blurred by CSS: backlight in the slide's colours.
+        f'<img class="deck-glow" src="{base}t{start}.webp" alt="" aria-hidden="true">'
         f'<div class="deck-stage"><img class="deck-img" src="{base}{start}.webp" alt="{esc(item["title"])}">'
         f'<button class="deck-nav deck-prev" type="button" aria-label="{esc(t["prev"])}">←</button>'
         f'<button class="deck-nav deck-next" type="button" aria-label="{esc(t["next"])}">→</button></div>'

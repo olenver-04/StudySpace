@@ -22,6 +22,7 @@ def test_pdf_opens_in_the_slide_viewer(gh):
     page = html_of(ok(app('reader', 'ru', course='algo', material=LECTURE)))
     assert 'class="deck"' in page and 'data-total="3"' in page and 'data-start="1"' in page
     assert page.count('class="deck-thumb') == 3
+    assert 'class="deck-glow"' in page and '/t1.webp' in page  # backlight uses the small preview
 
 
 def test_slide_parameter_opens_that_slide(gh):

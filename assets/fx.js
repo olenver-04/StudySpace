@@ -195,6 +195,8 @@
       if (i === current(deck) && deck.dataset.i) return;
       deck.dataset.i = i;
       deck.querySelector('.deck-img').src = base + i + '.webp';
+      var glow = deck.querySelector('.deck-glow');
+      if (glow) glow.src = base + 't' + i + '.webp';
       deck.querySelector('.deck-count b').textContent = String(i).padStart(2, '0');
       deck.querySelector('.deck-progress i').style.width = (100 * i / n) + '%';
       deck.querySelectorAll('.deck-thumb').forEach(function (t) {

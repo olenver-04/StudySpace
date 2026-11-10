@@ -795,3 +795,12 @@ button, [role="tab"], .st-key-topnav, .hero h1, .course-hero h1, .heading-block 
 .course-hero:has(.course-fan) h1 {font-size: clamp(36px, 5.2vw, 80px)}
 .course-fan {width: min(30%, 380px)}
 .course-hero:has(.course-fan) .stats {margin-top: clamp(40px, 7vw, 104px)}
+
+/* Backlight: the current slide, blurred, glows from behind the viewer (in fullscreen it fills the bars) */
+/* img.deck-glow: Streamlit's own "img {object-fit: scale-down}" would otherwise shrink the small preview to its natural size */
+.deck img.deck-glow {position: absolute; top: 0; left: 0; width: 100%; max-width: none; aspect-ratio: 16 / 9; object-fit: cover; z-index: 0; pointer-events: none;
+            filter: blur(48px) saturate(1.6) brightness(1.25); opacity: .6; transform: scale(1.05)}
+.ss-light .deck img.deck-glow {opacity: .45}
+.deck-stage, .deck-bar, .deck-strip {position: relative; z-index: 1}
+.deck:fullscreen img.deck-glow, .deck.pseudo-full img.deck-glow {height: 100%; aspect-ratio: auto; opacity: .45; transform: none}
+.deck:fullscreen .deck-stage, .deck.pseudo-full .deck-stage {background: transparent}
