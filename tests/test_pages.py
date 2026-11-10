@@ -34,16 +34,16 @@ def test_uploaded_html_is_isolated(gh):
     assert any('data:text/html' in s for s in srcs), srcs
 
 
-def test_new_badge_and_section(gh):
+def test_new_badge_without_a_section(gh):
     gh.recent = {U + 'algo/kz/presentations/Дәріс_1.pdf': '2026-11-05'}
     page = html_of(ok(app('home', 'kz')))
-    assert 'Жаңа материалдар' in page and 'tag-new' in page
+    assert 'class="tag-new"' in page and 'Жаңа материалдар' not in page  # courses come first; the course row keeps "+1 new"
 
 
 def test_badge_lookup_failure_does_not_break_site(gh):
     gh.recent = AttributeError("'GithubStore' object has no attribute 'recent_files'")  # the 2026-11 Cloud crash
     page = html_of(ok(app('home', 'kz')))
-    assert 'Жаңа материалдар' not in page
+    assert 'class="tag-new"' not in page
 
 
 def test_recently_opened(gh):

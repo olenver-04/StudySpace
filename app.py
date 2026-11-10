@@ -79,7 +79,7 @@ I18N = {
         'poster_scan':'Все материалы — по QR-коду',
         'poster_hint':'Наведи камеру телефона на код, чтобы открыть лекции и презентации этого предмета.',
         'recent_title':'Недавно открытые', 'recent_sub':'Материалы, которые ты открывал на этом устройстве.',
-        'new':'НОВОЕ', 'new_title':'Новые материалы', 'new_sub':'Добавлено за последние 7 дней.',
+        'new':'НОВОЕ', 'new_title':'Новые материалы',
         'back_home':'← Ко всем предметам', 'back_course':'← К предмету',
         'lectures_title':'Лекции', 'presentations_title':'Презентации',
         'share':'ПОДЕЛИТЬСЯ', 'share_title':'Ссылка на этот материал', 'qr_big':'⛶  QR на весь экран',
@@ -121,7 +121,7 @@ I18N = {
         'poster_scan':'Барлық материал — QR-код арқылы',
         'poster_hint':'Осы пәннің дәрістері мен презентацияларын ашу үшін телефон камерасын кодқа бағытта.',
         'recent_title':'Соңғы ашылғандар', 'recent_sub':'Осы құрылғыда ашқан материалдарың.',
-        'new':'ЖАҢА', 'new_title':'Жаңа материалдар', 'new_sub':'Соңғы 7 күнде қосылғандар.',
+        'new':'ЖАҢА', 'new_title':'Жаңа материалдар',
         'back_home':'← Барлық пәндерге', 'back_course':'← Пәнге оралу',
         'lectures_title':'Дәрістер', 'presentations_title':'Презентациялар',
         'share':'БӨЛІСУ', 'share_title':'Осы материалға сілтеме', 'qr_big':'⛶  QR-код толық экранда',
@@ -633,10 +633,6 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
     if recent:
         header(t['recent_title'], t['recent_sub'], '↺')
         material_grid(recent[:3], lang, 'recent')
-    fresh = sorted((m for m in visible if m.get('new')), key=lambda m: m['new'], reverse=True)
-    if fresh:
-        header(t['new_title'], t['new_sub'], '✦')
-        material_grid(fresh[:3], lang, 'fresh')
     header(t['courses'], t['course_sub'], f'{len(visible_courses):02d}')
     if not visible_courses:
         empty(t['empty_courses'], t['empty_desc'])
