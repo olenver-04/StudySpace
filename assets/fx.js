@@ -337,20 +337,6 @@
       setTimeout(toTop, 600);
     }, 250);
 
-    // "Recently opened": material ids kept in a cookie so the server can read them on the next visit.
-    function rememberMaterial() {
-      var id = new URLSearchParams(location.search).get('material');
-      if (!id) return;
-      var match = document.cookie.match(/(?:^|; )ss_recent=([^;]*)/);
-      var list = match ? decodeURIComponent(match[1]).split('|').filter(Boolean) : [];
-      list = [id].concat(list.filter(function (x) { return x !== id; })).slice(0, 8);
-      var value = encodeURIComponent(list.join('|'));
-      while (value.length > 3500 && list.length > 1) { list.pop(); value = encodeURIComponent(list.join('|')); }
-      document.cookie = 'ss_recent=' + value + '; path=/; max-age=31536000; SameSite=Lax';
-    }
-    var lastRecent = location.search;
-    rememberMaterial();
-    setInterval(function () { if (location.search !== lastRecent) { lastRecent = location.search; rememberMaterial(); } }, 500);
 
     // Count-up for statistics; new nodes appear after every navigation.
     function countUp() {

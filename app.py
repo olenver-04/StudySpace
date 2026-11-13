@@ -78,7 +78,7 @@ I18N = {
         'poster':'Плакат A4 с QR-кодом', 'poster_download':'↓ Скачать плакат (HTML)', 'print':'Печать / PDF',
         'poster_scan':'Все материалы — по QR-коду',
         'poster_hint':'Наведи камеру телефона на код, чтобы открыть лекции и презентации этого предмета.',
-        'recent_title':'Недавно открытые', 'recent_sub':'Материалы, которые ты открывал на этом устройстве.',
+       
         'new':'НОВОЕ', 'new_title':'Новые материалы',
         'back_home':'← Ко всем предметам', 'back_course':'← К предмету',
         'lectures_title':'Лекции', 'presentations_title':'Презентации',
@@ -120,7 +120,7 @@ I18N = {
         'poster':'QR-коды бар A4 плакат', 'poster_download':'↓ Плакатты жүктеу (HTML)', 'print':'Басып шығару / PDF',
         'poster_scan':'Барлық материал — QR-код арқылы',
         'poster_hint':'Осы пәннің дәрістері мен презентацияларын ашу үшін телефон камерасын кодқа бағытта.',
-        'recent_title':'Соңғы ашылғандар', 'recent_sub':'Осы құрылғыда ашқан материалдарың.',
+       
         'new':'ЖАҢА', 'new_title':'Жаңа материалдар',
         'back_home':'← Барлық пәндерге', 'back_course':'← Пәнге оралу',
         'lectures_title':'Дәрістер', 'presentations_title':'Презентациялар',
@@ -578,17 +578,6 @@ def progress_bar(done: int, total: int, label: str) -> str:
             f'<span>{done}/{total} {esc(label)}</span></div>')
 
 
-def recent_ids() -> list[str]:
-    """Materials opened in this visit first, then earlier visits (cookie written by fx.js)."""
-    try:
-        raw = st.context.cookies.get('ss_recent')
-    except Exception:
-        raw = None
-    saved = unquote(raw).split('|') if isinstance(raw, str) else []
-    ids = st.session_state.get('recent', []) + saved
-    return [i for n, i in enumerate(ids) if i and i not in ids[:n]]
-
-
 def home(config: dict, materials: list[dict], lang: str) -> None:
     t = I18N[lang]
     visible_courses = [c for c in config['courses'] if lang in course_languages(c)]
@@ -602,11 +591,6 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
     )
     if st.button(t['browse']+'  →', type='primary', key='hero_browse'):
         route('library')
-    by_id = {m['id']: m for m in visible}
-    recent = [by_id[i] for i in recent_ids() if i in by_id][:4]
-    if recent:
-        header(t['recent_title'], t['recent_sub'], '↺')
-        material_grid(recent[:3], lang, 'recent')
     header(t['courses'], t['course_sub'], f'{len(visible_courses):02d}')
     if not visible_courses:
         empty(t['empty_courses'], t['empty_desc'])
@@ -617,7 +601,6 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
         # Just the name: no cover, no counts, no "new" tag (the course page has the details).
         if row('course_'+course['id'], n, display_course(course, lang), big=True, color=accent(own),
                extra=progress_bar(studied, len(own), t['studied']) if studied else '',
-               meta=f'{course.get("icon", "")}',
                button=t['open']+' →', button_key=f'course_{lang}_{course["id"]}'):
             route('course', course=course['id'])
     end_list()
@@ -715,7 +698,6 @@ def reader(materials: list[dict], lang: str) -> None:
         if st.button(t['back']):
             route('library')
         return
-    st.session_state['recent'] = [item['id']] + [i for i in st.session_state.get('recent', []) if i != item['id']][:7]
     if item['lang'] != lang:
         lang = item['lang']; t = I18N[lang]
     kind = t['lectures_one'] if item['kind'] == 'lectures' else t['presentations_one']
@@ -1362,7 +1344,7 @@ def search_index(config: dict, materials: list[dict]) -> None:
         tl = I18N[code]
         courses = [c for c in config['courses'] if code in course_languages(c)]
         ids = {c['id'] for c in courses}
-        entries += [{'k': tl['course_word'], 't': display_course(c, code), 's': c.get('icon', ''), 'l': code, 'c': 1,
+        entries += [{'k': tl['course_word'], 't': display_course(c, code), 's': '', 'l': code, 'c': 1,
                      'u': '?'+urlencode({'lang': code, 'course': c['id']})} for c in courses]
         entries += [{'k': tl['lectures_one'] if m['kind'] == 'lectures' else tl['presentations_one'], 't': m['title'],
                      's': display_course(m['course'], code), 'l': code, 'u': '?'+urlencode({'lang': code, 'material': m['id']})}

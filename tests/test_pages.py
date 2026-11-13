@@ -47,10 +47,11 @@ def test_badge_lookup_failure_does_not_break_site(gh):
     assert 'class="tag-new"' not in html_of(ok(app('library', 'kz')))
 
 
-def test_recently_opened(gh):
+def test_home_is_minimal(gh):
     at = app('home', 'ru')
     at.session_state['recent'] = [U + 'algo/ru/lectures/Лекция_10.pdf']
-    assert 'Недавно открытые' in html_of(ok(at))
+    page = html_of(ok(at))
+    assert 'Недавно открытые' not in page and '🧮' not in page  # no recent section, no course icons
 
 
 def test_course_page_groups(gh):
