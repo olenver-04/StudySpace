@@ -37,6 +37,16 @@
         "ru",
         "kz"
       ]
+    },
+    {
+      "id": "setevye-tehnologiy",
+      "title_ru": "Сетевые технологий",
+      "title_kz": "Желілік технологиялар",
+      "icon": "🌐",
+      "languages": [
+        "ru",
+        "kz"
+      ]
     }
   ]
 }
