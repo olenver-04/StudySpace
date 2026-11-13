@@ -613,16 +613,11 @@ def home(config: dict, materials: list[dict], lang: str) -> None:
         return
     for n, course in enumerate(visible_courses, 1):
         own = [m for m in visible if m['course_id'] == course['id']]
-        lect = sum(m['kind'] == 'lectures' for m in own)
-        fresh_count = sum(bool(m.get('new')) for m in own)
         studied = sum(is_done(m) for m in own)
-        n_slides = sum(slides(m) for m in own)
-        sub = (f'{lect} {t["lectures"]} · {len(own) - lect} {t["presentations"]}' if mixed()
-               else f'{len(own)} {plural(len(own), lang, "pres")}' + (f' · {n_slides} {plural(n_slides, lang, "slides")}' if n_slides else ''))
-        first_cover = next((cover_url(m) for m in own if cover_url(m)), '')
-        if row('course_'+course['id'], n, display_course(course, lang), big=True, sub=sub, thumb=first_cover, color=accent(own),
+        # Just the name: no cover, no counts, no "new" tag (the course page has the details).
+        if row('course_'+course['id'], n, display_course(course, lang), big=True, color=accent(own),
                extra=progress_bar(studied, len(own), t['studied']) if studied else '',
-               meta=f'{course.get("icon", "")}', new=f'+{fresh_count} {t["new"]}' if fresh_count else '',
+               meta=f'{course.get("icon", "")}',
                button=t['open']+' →', button_key=f'course_{lang}_{course["id"]}'):
             route('course', course=course['id'])
     end_list()
